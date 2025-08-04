@@ -385,7 +385,7 @@ formData.append("opmerkingen", form.opmerkingen.value);
 
     jobSections.forEach((section, index) => {
       const descElem = section.querySelector("[name='job_description[]']");
-const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
+const desc = descElem?.value || "";
 
 formData.append(`job[${index}][description]`, desc);
 
