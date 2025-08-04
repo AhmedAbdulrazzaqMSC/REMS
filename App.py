@@ -198,7 +198,7 @@ def submit():
     print("File exists TEMP:", os.path.exists(TEMP_FILE))
     print("File exists PERM:", os.path.exists(PERM_FILE))
     for photo in photo_paths:
-    print("Photo saved?", os.path.exists(photo), photo)
+        print("Photo saved?", os.path.exists(photo), photo)
 
 
 
@@ -213,6 +213,7 @@ if __name__ == '__main__':
     initialize_temp_file()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
