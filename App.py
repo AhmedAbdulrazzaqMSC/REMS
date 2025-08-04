@@ -189,8 +189,8 @@ def submit():
 
     df_new = pd.DataFrame(records)
     existing_df = pd.read_excel(TEMP_FILE)
-        df_combined = pd.concat([existing_df, df_new], ignore_index=True)
-    df_combined.to_excel(TEMP_FILE, index=False)  # ✅ CORRECT
+    df_combined = pd.concat([existing_df, df_new], ignore_index=True)
+    df_combined.to_excel(TEMP_FILE, index=False)
 
 
     send_html_email(meta, jobs, alarms, photo_paths)
@@ -204,4 +204,5 @@ if __name__ == '__main__':
     initialize_temp_file()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
