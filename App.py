@@ -191,6 +191,15 @@ def submit():
     existing_df = pd.read_excel(TEMP_FILE)
     df_combined = pd.concat([existing_df, df_new], ignore_index=True)
     df_combined.to_excel(TEMP_FILE, index=False)
+    print("TEMP_FILE:", TEMP_FILE)
+    print("PERM_FILE:", PERM_FILE)
+    print("PHOTO_DIR:", PHOTO_DIR)
+    print("Photo paths:", photo_paths)
+    print("File exists TEMP:", os.path.exists(TEMP_FILE))
+    print("File exists PERM:", os.path.exists(PERM_FILE))
+    for photo in photo_paths:
+    print("Photo saved?", os.path.exists(photo), photo)
+
 
 
     send_html_email(meta, jobs, alarms, photo_paths)
@@ -204,5 +213,6 @@ if __name__ == '__main__':
     initialize_temp_file()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
