@@ -410,7 +410,8 @@ alarmValues.forEach((value) => {
 
 
 
-    const response = await fetch("http://127.0.0.1:5000/submit", {
+    const response = await fetch('/submit', {
+
       method: "POST",
       body: formData,
     });
