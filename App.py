@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 import smtplib
@@ -12,22 +12,27 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
-from flask import render_template
 
-@app.route('/')
-def index():
-    return render_template('Index.html')
+# Detect environment (Render sets 'RENDER' in env)
+IS_RENDER = os.environ.get("RENDER", None) is not None
 
-TEMP_FILE = "temp_reports.xlsx"
-PERM_FILE = "master_log.xlsx"
-PHOTO_DIR = "photos"
+# Directories and files
+BASE_DIR = "/tmp" if IS_RENDER else "."
+PHOTO_DIR = os.path.join(BASE_DIR, "photos")
+TEMP_FILE = os.path.join(BASE_DIR, "temp_reports.xlsx")
+PERM_FILE = os.path.join(BASE_DIR, "master_log.xlsx")
+
 EMAIL_FROM = "emergencyrepairsmpet@gmail.com"
 EMAIL_PASS = "gvwe limw yzya oejc"
 EMAIL_TO = "A.abdulrazzaq@medrepair.eu"
 
 os.makedirs(PHOTO_DIR, exist_ok=True)
 
-# Ensure temp file exists with correct headers
+@app.route('/')
+def index():
+    return render_template('Index.html')
+
+
 def initialize_temp_file():
     if not os.path.exists(TEMP_FILE):
         df = pd.DataFrame(columns=[
@@ -40,7 +45,6 @@ def initialize_temp_file():
         ])
         df.to_excel(TEMP_FILE, index=False)
 
-# Move data from temp to permanent Excel
 def move_data_to_master():
     if not os.path.exists(TEMP_FILE):
         print("Temporary file does not exist.")
@@ -61,7 +65,7 @@ def move_data_to_master():
     temp_df.iloc[0:0].to_excel(TEMP_FILE, index=False)
     print("Moved data from temp to master_log.xlsx.")
 
-# Send HTML email with structured info and photos
+
 def send_html_email(meta, jobs, alarms, photo_paths):
     msg = MIMEMultipart()
     msg["Subject"] = f"Herstelmail ({meta['containernr']})"
@@ -93,7 +97,6 @@ def send_html_email(meta, jobs, alarms, photo_paths):
     {job_table}
     </body></html>
     """
-
     msg.attach(MIMEText(html, "html"))
 
     for path in photo_paths:
@@ -109,7 +112,7 @@ def send_html_email(meta, jobs, alarms, photo_paths):
         server.send_message(msg)
         print("Email sent")
 
-# Schedule background job
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(move_data_to_master, 'interval', hours=1)
 scheduler.start()
@@ -197,4 +200,3 @@ if __name__ == '__main__':
     initialize_temp_file()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
