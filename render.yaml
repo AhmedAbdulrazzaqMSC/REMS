@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: rems-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python App.py
+    plan: free
+    autoDeploy: true
