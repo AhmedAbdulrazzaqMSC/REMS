@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text  # Required for raw SQL queries
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -99,7 +100,7 @@ class Alarm(db.Model):
 with app.app_context():
     try:
         db.create_all()
-        db.session.execute("SELECT 1")
+        db.session.execute(text("SELECT 1"))  # Fixed: Using text() wrapper
         app.logger.info("Database initialized successfully")
     except Exception as e:
         app.logger.critical(f"Database initialization failed: {str(e)}")
@@ -134,7 +135,7 @@ def submit_report():
         # Validate container number
         container_nr = form_data.get('containernr', '')
         if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
-            return jsonify({"status": "error", "message": "Container number must be 4 letters + 7 digits"}), 400
+            return jsonify({"status": "error", "message": "Invalid container number format"}), 400
 
         # Create report
         report = RepairReport(
@@ -227,7 +228,11 @@ def generate_email_content(form_data, attachments):
         <h2>REMS Repair Report</h2>
         <p>Container: {form_data.get('containernr')}</p>
         <p>Date: {form_data.get('datum')}</p>
-        <!-- Add more fields as needed -->
+        <p>Technician: {form_data.get('naam')}</p>
+        <h3>Problem Description</h3>
+        <p>{form_data.get('probleem') or 'N/A'}</p>
+        <h3>Resolution</h3>
+        <p>{form_data.get('opmerkingen') or 'N/A'}</p>
     </body>
     </html>
     """
