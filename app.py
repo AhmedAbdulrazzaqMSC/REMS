@@ -2,7 +2,7 @@ import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text  # Required for raw SQL queries
+from sqlalchemy import text  # Required import for raw SQL
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -94,13 +94,14 @@ class Alarm(db.Model):
     alarm_code = db.Column(db.String(100))
 
 # ======================
-# Initialize Database
+# Initialize Database (FIXED VERSION)
 # ======================
 
 with app.app_context():
     try:
         db.create_all()
-        db.session.execute(text("SELECT 1"))  # Fixed: Using text() wrapper
+        # CORRECTED: Using text() wrapper for raw SQL
+        db.session.execute(text("SELECT 1"))
         app.logger.info("Database initialized successfully")
     except Exception as e:
         app.logger.critical(f"Database initialization failed: {str(e)}")
@@ -125,7 +126,6 @@ def serve_static(path):
 @app.route('/api/submit', methods=['POST'])
 def submit_report():
     try:
-        # Validate request
         if not request.is_json and not request.form:
             return jsonify({"status": "error", "message": "Unsupported content type"}), 415
 
