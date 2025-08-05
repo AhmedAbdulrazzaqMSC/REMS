@@ -16,21 +16,14 @@ services:
       - key: SMTP_PORT
         value: 465
       - key: SMTP_USERNAME
-        value: emergencyrepairsmpet@gmail.com
+        value: your_email@gmail.com
       - key: SMTP_PASSWORD
-        sync: false  # Set this value manually in Render dashboard
+        sync: false
       - key: EMAIL_FROM
-        value: emergencyrepairsmpet@gmail.com
+        value: your_email@gmail.com
       - key: EMAIL_TO
-        value: a.abdulrazzaq@medrepair.eu
-      - key: PYTHON_VERSION
-        value: 3.9.13
-    healthCheckPath: /
+        value: recipient@example.com
 
 databases:
   - name: rems-db
     plan: free
-    pgExtensions:
-      - pg_stat_statements
-    ipAllowList:
-      - 0.0.0.0/0
