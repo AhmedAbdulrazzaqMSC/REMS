@@ -13,7 +13,7 @@ import logging
 from werkzeug.utils import secure_filename
 
 # Initialize Flask app
-app = Flask(__name__, static_folder='static')  # Changed to serve static files
+app = Flask(__name__, static_folder='static')
 CORS(app, resources={
     r"/api/*": {"origins": "*"},
     r"/static/*": {"origins": "*"}
@@ -125,7 +125,6 @@ def serve_static(path):
 @app.route('/api/submit', methods=['POST'])
 def submit_report():
     try:
-        # Validate request
         if not request.is_json and not request.form:
             return jsonify({"status": "error", "message": "Unsupported content type"}), 415
 
@@ -179,7 +178,7 @@ def submit_report():
             )
             db.session.add(job)
         
-        # Process alarms - FIXED
+        # Process alarms
         for alarm in request.form.getlist('alarm[]'):
             if alarm.strip():
                 db.session.add(Alarm(
@@ -199,7 +198,7 @@ def submit_report():
         # Send email
         try:
             send_email(
-                subject=f"REMS Report - {container_nr}",
+                subject=container_nr,  # Container number for subject
                 body=generate_email_content(form_data, saved_files),
                 attachments=saved_files
             )
@@ -229,13 +228,17 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
 def generate_email_content(form_data, attachments):
+    before_photos = len([f for f in attachments if 'before' in f.lower()])
+    after_photos = len([f for f in attachments if 'after' in f.lower()])
+    
     return f"""
     <html>
-    <body>
+    <body style="font-family: Arial, sans-serif;">
         <h2>REMS Repair Report</h2>
-        <p>Container: {form_data.get('containernr')}</p>
-        <p>Date: {form_data.get('datum')}</p>
-        <p>Technician: {form_data.get('naam')}</p>
+        <p><strong>Container:</strong> {form_data.get('containernr')}</p>
+        <p><strong>Date:</strong> {form_data.get('datum')}</p>
+        <p><strong>Technician:</strong> {form_data.get('naam')}</p>
+        <p><strong>Photos:</strong> {before_photos} before, {after_photos} after</p>
         <h3>Problem Description</h3>
         <p>{form_data.get('probleem') or 'N/A'}</p>
         <h3>Resolution</h3>
@@ -246,7 +249,7 @@ def generate_email_content(form_data, attachments):
 
 def send_email(subject, body, attachments):
     try:
-        # Email configuration (now hardcoded per your request)
+        # Email configuration (hardcoded as provided)
         SMTP_SERVER = 'smtp.gmail.com'
         SMTP_PORT = 587
         SMTP_USERNAME = 'emergencyrepairsmpet@gmail.com'
@@ -258,12 +261,10 @@ def send_email(subject, body, attachments):
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
-        msg['Subject'] = f"Herstelmail ({subject})"  # Added container number to subject
-
-        # HTML email body
+        msg['Subject'] = f"Herstelmail ({subject})"  # Custom subject format
         msg.attach(MIMEText(body, 'html'))
 
-        # Attach files if any
+        # Attach files
         for filepath in attachments:
             try:
                 with open(filepath, 'rb') as f:
@@ -280,9 +281,9 @@ def send_email(subject, body, attachments):
             except Exception as file_error:
                 app.logger.error(f"Failed to attach {filepath}: {str(file_error)}")
 
-        # Send email with error handling
+        # Send email
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
-            smtp.starttls()  # Enable TLS encryption
+            smtp.starttls()  # Enable TLS
             smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
             smtp.send_message(msg)
             app.logger.info(f"Email sent successfully to {EMAIL_TO}")
@@ -296,6 +297,11 @@ def send_email(subject, body, attachments):
     except Exception as e:
         app.logger.error(f"Email failed: {str(e)}", exc_info=True)
         raise
+
+# ======================
+# Start Application
+# ======================
+
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
@@ -303,4 +309,3 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
