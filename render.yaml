@@ -2,7 +2,9 @@ services:
   - type: web
     name: rems-app
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      mkdir -p static
     startCommand: gunicorn app:app
     envVars:
       - key: DATABASE_URL
