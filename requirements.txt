@@ -2,7 +2,7 @@ Flask==2.0.3
 Werkzeug==2.0.3
 Flask-Cors==3.0.10
 Flask-SQLAlchemy==2.5.1
-SQLAlchemy==1.4.48  # Critical fix
-psycopg2-binary==2.9.1
+psycopg2-binary==2.9.6  # Updated version
 python-dotenv==0.19.0
 gunicorn==20.1.0
+SQLAlchemy==1.4.48
