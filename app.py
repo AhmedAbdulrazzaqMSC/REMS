@@ -16,29 +16,13 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://username:password@localhost/rems_db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize database
 db = SQLAlchemy(app)
-
-# Email configuration
-SMTP_CONFIG = {
-    'SERVER': "smtp.gmail.com",
-    'PORT': 465,
-    'USERNAME': "emergencyrepairsmpet@gmail.com",
-    'PASSWORD': "gvwe limw yzya oejc",
-    'FROM': "emergencyrepairsmpet@gmail.com",
-    'TO': "a.abdulrazzaq@medrepair.eu",
-    'CC': []
-}
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Database Models
 class RepairReport(db.Model):
@@ -91,24 +75,23 @@ class Alarm(db.Model):
 with app.app_context():
     db.create_all()
 
-# Frontend serving
+# Frontend routes
 @app.route('/')
-def serve_frontend():
+def serve_index():
     return send_from_directory('.', 'index.html')
 
 @app.route('/static/<path:path>')
 def serve_static(path):
     return send_from_directory('.', path)
 
-# API Endpoints
+# API Endpoint
 @app.route('/api/submit', methods=['POST'])
 def submit_report():
     try:
-        # Get form data and files
         form_data = request.form
         files = request.files
         
-        # Validate container number format (ABCD1234567)
+        # Validate container number
         container_nr = form_data.get('containernr', '')
         if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
             return jsonify({"status": "error", "message": "Invalid container number format"}), 400
@@ -190,14 +173,14 @@ def submit_report():
             try:
                 os.remove(file_info['path'])
             except Exception as e:
-                logger.error(f"Error deleting file {file_info['path']}: {e}")
+                logging.error(f"Error deleting file {file_info['path']}: {e}")
         
         db.session.commit()
         return jsonify({"status": "success", "report_id": report.id})
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error processing report: {e}")
+        logging.error(f"Error processing report: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # Helper functions
@@ -226,8 +209,8 @@ def generate_email_content(form_data, attachments):
 
 def send_email(subject, body, attachments):
     msg = MIMEMultipart()
-    msg['From'] = SMTP_CONFIG['FROM']
-    msg['To'] = SMTP_CONFIG['TO']
+    msg['From'] = os.getenv('EMAIL_FROM')
+    msg['To'] = os.getenv('EMAIL_TO')
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'html'))
     
@@ -242,9 +225,10 @@ def send_email(subject, body, attachments):
                 part['Content-Disposition'] = f'attachment; filename="{file_info["original_name"]}"'
                 msg.attach(part)
     
-    with smtplib.SMTP_SSL(SMTP_CONFIG['SERVER'], SMTP_CONFIG['PORT']) as server:
-        server.login(SMTP_CONFIG['USERNAME'], SMTP_CONFIG['PASSWORD'])
+    with smtplib.SMTP_SSL(os.getenv('SMTP_SERVER'), int(os.getenv('SMTP_PORT'))) as server:
+        server.login(os.getenv('SMTP_USERNAME'), os.getenv('SMTP_PASSWORD'))
         server.send_message(msg)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
