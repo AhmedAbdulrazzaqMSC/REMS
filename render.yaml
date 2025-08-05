@@ -18,23 +18,18 @@ services:
       - key: SMTP_USERNAME
         value: emergencyrepairsmpet@gmail.com
       - key: SMTP_PASSWORD
-        value: gvwe limw yzya oejc
+        sync: false  # Set this value manually in Render dashboard
       - key: EMAIL_FROM
         value: emergencyrepairsmpet@gmail.com
       - key: EMAIL_TO
         value: a.abdulrazzaq@medrepair.eu
-      - key: UPLOAD_FOLDER
-        value: uploads
       - key: PYTHON_VERSION
-        value: 3.9.7
+        value: 3.9.13
+    healthCheckPath: /
 
 databases:
   - name: rems-db
     plan: free
-    databaseName: rems
-    user: rems_user
-
-# Advanced properties (optional)
     pgExtensions:
       - pg_stat_statements
     ipAllowList:
