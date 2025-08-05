@@ -1,219 +1,265 @@
 import os
-import pandas as pd
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from apscheduler.schedulers.background import BackgroundScheduler
+from flask_sqlalchemy import SQLAlchemy
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
+from datetime import datetime
+import logging
 from werkzeug.utils import secure_filename
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# Detect environment (Render sets 'RENDER' in env)
-IS_RENDER = os.environ.get("RENDER", None) is not None
+# Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://username:password@localhost/rems_db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = 'uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Directories and files
-BASE_DIR = "/tmp" if IS_RENDER else "."
-PHOTO_DIR = os.path.join(BASE_DIR, "photos")
-TEMP_FILE = os.path.join(BASE_DIR, "temp_reports.xlsx")
-PERM_FILE = os.path.join(BASE_DIR, "master_log.xlsx")
+# Initialize database
+db = SQLAlchemy(app)
 
-EMAIL_FROM = "emergencyrepairsmpet@gmail.com"
-EMAIL_PASS = "gvwe limw yzya oejc"
-EMAIL_TO = "A.abdulrazzaq@medrepair.eu"
+# Email configuration
+SMTP_CONFIG = {
+    'SERVER': "smtp.gmail.com",
+    'PORT': 465,
+    'USERNAME': "emergencyrepairsmpet@gmail.com",
+    'PASSWORD': "gvwe limw yzya oejc",
+    'FROM': "emergencyrepairsmpet@gmail.com",
+    'TO': "a.abdulrazzaq@medrepair.eu",
+    'CC': []
+}
 
-os.makedirs(PHOTO_DIR, exist_ok=True)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@app.route('/')
-def index():
-    return render_template('Index.html')
+# Database Models
+class RepairReport(db.Model):
+    __tablename__ = 'repair_reports'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), nullable=False)
+    report_date = db.Column(db.Date, nullable=False)
+    technician_name = db.Column(db.String(100), nullable=False)
+    model = db.Column(db.String(100))
+    serial_number = db.Column(db.String(100))
+    warranty_id = db.Column(db.String(100))
+    warranty_status = db.Column(db.String(100))
+    setpoint = db.Column(db.Float)
+    vents = db.Column(db.String(50))
+    humidity = db.Column(db.String(50))
+    ambient_temp = db.Column(db.Float)
+    supply_temp_before = db.Column(db.Float)
+    supply_temp_after = db.Column(db.Float)
+    return_temp_before = db.Column(db.Float)
+    return_temp_after = db.Column(db.Float)
+    temp_in_range = db.Column(db.String(50))
+    problem_description = db.Column(db.Text)
+    comments = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    jobs = db.relationship('RepairJob', backref='report', cascade='all, delete-orphan')
+    alarms = db.relationship('Alarm', backref='report', cascade='all, delete-orphan')
 
+class RepairJob(db.Model):
+    __tablename__ = 'repair_jobs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey('repair_reports.id'), nullable=False)
+    job_code = db.Column(db.String(50))
+    description = db.Column(db.String(255))
+    part_number = db.Column(db.String(100))
+    part_description = db.Column(db.String(255))
+    quantity = db.Column(db.Integer)
+    damage_type = db.Column(db.String(50))
+    old_serial = db.Column(db.String(100))
+    new_serial = db.Column(db.String(100))
+    labor_hours = db.Column(db.Float)
 
-def initialize_temp_file():
-    if not os.path.exists(TEMP_FILE):
-        df = pd.DataFrame(columns=[
-            "containernr", "datum", "naam", "model", "serienr", "warranty_id",
-            "garantie", "setpoint", "vents", "hum", "ambient", "supply_voor",
-            "supply_na", "return_voor", "return_na", "temp_in_range", "probleem",
-            "opmerkingen", "alarms", "job_description", "job_code", "part_number",
-            "part_description", "quantity", "old_serial", "new_serial", "labor_hours",
-            "damage_type"
-        ])
-        df.to_excel(TEMP_FILE, index=False)
+class Alarm(db.Model):
+    __tablename__ = 'alarms'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey('repair_reports.id'), nullable=False)
+    alarm_code = db.Column(db.String(100))
 
-def move_data_to_master():
-    if not os.path.exists(TEMP_FILE):
-        print("Temporary file does not exist.")
-        return
+# Create tables
+with app.app_context():
+    db.create_all()
 
-    temp_df = pd.read_excel(TEMP_FILE)
-    if temp_df.empty:
-        print("Temporary file is empty. Nothing to move.")
-        return
+# Helper Functions
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-    if os.path.exists(PERM_FILE):
-        perm_df = pd.read_excel(PERM_FILE)
-        combined_df = pd.concat([perm_df, temp_df], ignore_index=True)
-    else:
-        combined_df = temp_df
+def process_uploaded_files(files):
+    saved_files = []
+    for file_key, file in files.items():
+        if file.filename == '' or not allowed_file(file.filename):
+            continue
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        original_name = secure_filename(file.filename)
+        safe_name = f"{timestamp}_{original_name}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_name)
+        
+        file.save(file_path)
+        saved_files.append({
+            'path': file_path,
+            'original_name': original_name,
+            'is_photo': file_key.startswith(('fotos_voor', 'fotos_na'))
+        })
+    return saved_files
 
-    combined_df.to_excel(PERM_FILE, index=False)
-    temp_df.iloc[0:0].to_excel(TEMP_FILE, index=False)
-    print("Moved data from temp to master_log.xlsx.")
+def cleanup_files(file_list):
+    for file_info in file_list:
+        try:
+            os.remove(file_info['path'])
+        except Exception as e:
+            logger.error(f"Error deleting file {file_info['path']}: {e}")
 
-
-def send_html_email(meta, jobs, alarms, photo_paths):
-    msg = MIMEMultipart()
-    msg["Subject"] = f"Herstelmail ({meta['containernr']})"
-    msg["From"] = EMAIL_FROM
-    msg["To"] = EMAIL_TO
-
-    meta_html = "".join([f"<p><strong>{k}:</strong> {v}</p>" for k, v in meta.items()])
-    alarm_html = "<ul>" + "".join([f"<li>{a}</li>" for a in alarms]) + "</ul>"
-
-    job_rows = "".join([
-        f"<tr><td>{j['description']}</td><td>{j['code']}</td><td>{j['part_number']}</td><td>{j['part_description']}</td><td>{j['quantity']}</td><td>{j['old_serial']}</td><td>{j['new_serial']}</td><td>{j['damage_type']}</td></tr>"
-        for j in jobs
-    ])
-    job_table = f"""
-        <table border='1' cellpadding='4' cellspacing='0'>
-        <tr><th>Description</th><th>Code</th><th>Part Number</th><th>Part Description</th><th>Qty</th><th>Old Serial</th><th>New Serial</th><th>Damage</th></tr>
-        {job_rows}
-        </table>
-    """
-
-    html = f"""
+def generate_email_content(form_data, attachments):
+    before_photos = sum(1 for f in attachments if 'fotos_voor' in f['original_name'].lower())
+    after_photos = sum(1 for f in attachments if 'fotos_na' in f['original_name'].lower())
+    
+    return f"""
     <html>
     <body>
-    <h2>REPAIR REPORT</h2>
-    {meta_html}
-    <h3>Alarms</h3>
-    {alarm_html}
-    <h3>Job Tasks</h3>
-    {job_table}
-    </body></html>
+        <h2>REMS Repair Report</h2>
+        <p><strong>Container Number:</strong> {form_data.get('containernr', 'N/A')}</p>
+        <p><strong>Date:</strong> {form_data.get('datum', 'N/A')}</p>
+        <p><strong>Technician Name:</strong> {form_data.get('naam', 'N/A')}</p>
+        <p><strong>Photos:</strong> {before_photos} before, {after_photos} after</p>
+        <!-- Rest of your email template -->
+    </body>
+    </html>
     """
-    msg.attach(MIMEText(html, "html"))
 
-    for path in photo_paths:
-        with open(path, "rb") as f:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(f.read())
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f"attachment; filename={os.path.basename(path)}")
-            msg.attach(part)
+def send_email(subject, body, attachments):
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_CONFIG['FROM']
+    msg['To'] = SMTP_CONFIG['TO']
+    if SMTP_CONFIG['CC']:
+        msg['Cc'] = ", ".join(SMTP_CONFIG['CC'])
+    msg['Subject'] = subject
+    
+    msg.attach(MIMEText(body, 'html'))
+    
+    for file_info in attachments:
+        with open(file_info['path'], 'rb') as f:
+            if file_info['is_photo']:
+                img = MIMEImage(f.read())
+                img.add_header('Content-Disposition', 'attachment', filename=file_info['original_name'])
+                msg.attach(img)
+            else:
+                part = MIMEApplication(f.read(), Name=file_info['original_name'])
+                part['Content-Disposition'] = f'attachment; filename="{file_info["original_name"]}"'
+                msg.attach(part)
+    
+    with smtplib.SMTP_SSL(SMTP_CONFIG['SERVER'], SMTP_CONFIG['PORT']) as server:
+        server.login(SMTP_CONFIG['USERNAME'], SMTP_CONFIG['PASSWORD'])
+        recipients = [SMTP_CONFIG['TO']] + SMTP_CONFIG['CC']
+        server.sendmail(SMTP_CONFIG['FROM'], recipients, msg.as_string())
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(EMAIL_FROM, EMAIL_PASS)
-        server.send_message(msg)
-        print("Email sent")
-
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(move_data_to_master, 'interval', hours=1)
-scheduler.start()
-
+# Routes
 @app.route('/submit', methods=['POST'])
-def submit():
-    form = request.form
-    alarms = request.form.getlist('alarm[]')
-    files = request.files
-
-    jobs = []
-    job_count = int(form.get("job_count", 0))
-    for i in range(job_count):
-        jobs.append({
-            "description": form.get(f"job[{i}][description]", ""),
-            "code": form.get(f"job[{i}][code]", ""),
-            "part_number": form.get(f"job[{i}][part_number]", ""),
-            "part_description": form.get(f"job[{i}][part_description]", ""),
-            "quantity": form.get(f"job[{i}][quantity]", ""),
-            "old_serial": form.get(f"job[{i}][old_serial]", ""),
-            "new_serial": form.get(f"job[{i}][new_serial]", ""),
-            "labor_hours": form.get(f"job[{i}][labor_hours]", ""),
-            "damage_type": form.get(f"job[{i}][damage_type]", "")
+def submit_report():
+    try:
+        form_data = request.form
+        files = request.files
+        
+        # Save report to database
+        report = RepairReport(
+            container_number=form_data.get('containernr'),
+            report_date=datetime.strptime(form_data.get('datum'), '%Y-%m-%d').date(),
+            technician_name=form_data.get('naam'),
+            model=form_data.get('model'),
+            serial_number=form_data.get('serienr'),
+            warranty_id=form_data.get('warranty_id'),
+            warranty_status=form_data.get('garantie'),
+            setpoint=float(form_data.get('setpoint', 0)),
+            vents=form_data.get('vents'),
+            humidity=form_data.get('hum'),
+            ambient_temp=float(form_data.get('ambient', 0)),
+            supply_temp_before=float(form_data.get('supply_voor', 0)),
+            supply_temp_after=float(form_data.get('supply_na', 0)),
+            return_temp_before=float(form_data.get('return_voor', 0)),
+            return_temp_after=float(form_data.get('return_na', 0)),
+            temp_in_range=form_data.get('temp_in_range'),
+            problem_description=form_data.get('probleem'),
+            comments=form_data.get('opmerkingen')
+        )
+        db.session.add(report)
+        
+        # Save jobs
+        job_count = int(form_data.get('job_count', 0))
+        for i in range(job_count):
+            prefix = f'job[{i}]'
+            job = RepairJob(
+                report=report,
+                job_code=form_data.get(f'{prefix}[code]'),
+                description=form_data.get(f'{prefix}[description]'),
+                part_number=form_data.get(f'{prefix}[part_number]'),
+                part_description=form_data.get(f'{prefix}[part_description]'),
+                quantity=int(form_data.get(f'{prefix}[quantity]', 1)),
+                damage_type=form_data.get(f'{prefix}[damage_type]'),
+                old_serial=form_data.get(f'{prefix}[old_serial]'),
+                new_serial=form_data.get(f'{prefix}[new_serial]'),
+                labor_hours=float(form_data.get(f'{prefix}[labor_hours]', 0))
+            )
+            db.session.add(job)
+        
+        # Save alarms
+        for alarm in request.form.getlist('alarm[]'):
+            if alarm.strip():
+                db.session.add(Alarm(report=report, alarm_code=alarm.strip()))
+        
+        db.session.commit()
+        
+        # Process email with attachments
+        saved_files = process_uploaded_files(files)
+        email_content = generate_email_content(form_data, saved_files)
+        send_email(
+            subject=f"REMS Report - {form_data.get('containernr', 'No Container')}",
+            body=email_content,
+            attachments=saved_files
+        )
+        cleanup_files(saved_files)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Report submitted successfully",
+            "report_id": report.id
         })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error processing report: {e}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
-    meta = {
-        "containernr": form.get("containernr", ""),
-        "datum": form.get("datum", ""),
-        "naam": form.get("naam", ""),
-        "model": form.get("model", ""),
-        "serienr": form.get("serienr", ""),
-        "warranty_id": form.get("warranty_id", ""),
-        "garantie": form.get("garantie", ""),
-        "setpoint": form.get("setpoint", ""),
-        "vents": form.get("vents", ""),
-        "hum": form.get("hum", ""),
-        "ambient": form.get("ambient", ""),
-        "supply_voor": form.get("supply_voor", ""),
-        "supply_na": form.get("supply_na", ""),
-        "return_voor": form.get("return_voor", ""),
-        "return_na": form.get("return_na", ""),
-        "temp_in_range": form.get("temp_in_range", ""),
-        "probleem": form.get("probleem", ""),
-        "opmerkingen": form.get("opmerkingen", "")
-    }
-
-    photo_paths = []
-    for key in files:
-        for f in request.files.getlist(key):
-            if f.filename:
-                filename = secure_filename(f.filename)
-                ext = os.path.splitext(filename)[1]
-                save_name = f"{meta['containernr']}_{key}_{len(photo_paths)+1}{ext}"
-                save_path = os.path.join(PHOTO_DIR, save_name)
-                f.save(save_path)
-                photo_paths.append(save_path)
-
-    records = []
-    for job in jobs:
-        row = {
-            **meta,
-            "alarms": ", ".join(alarms),
-            "job_description": job["description"],
-            "job_code": job["code"],
-            "part_number": job["part_number"],
-            "part_description": job["part_description"],
-            "quantity": job["quantity"],
-            "old_serial": job["old_serial"],
-            "new_serial": job["new_serial"],
-            "labor_hours": job["labor_hours"],
-            "damage_type": job["damage_type"]
-        }
-        records.append(row)
-
-    df_new = pd.DataFrame(records)
-    existing_df = pd.read_excel(TEMP_FILE)
-    df_combined = pd.concat([existing_df, df_new], ignore_index=True)
-    df_combined.to_excel(TEMP_FILE, index=False)
-    print("TEMP_FILE:", TEMP_FILE)
-    print("PERM_FILE:", PERM_FILE)
-    print("PHOTO_DIR:", PHOTO_DIR)
-    print("Photo paths:", photo_paths)
-    print("File exists TEMP:", os.path.exists(TEMP_FILE))
-    print("File exists PERM:", os.path.exists(PERM_FILE))
-    for photo in photo_paths:
-        print("Photo saved?", os.path.exists(photo), photo)
-
-
-
-    send_html_email(meta, jobs, alarms, photo_paths)
-
-    move_data_to_master()  # ✅ Force master_log update after submission
-
-    return jsonify({"status": "success"})
-
+@app.route('/reports', methods=['GET'])
+def get_reports():
+    try:
+        reports = RepairReport.query.order_by(RepairReport.created_at.desc()).all()
+        return jsonify([{
+            'id': r.id,
+            'container_number': r.container_number,
+            'technician': r.technician_name,
+            'date': r.report_date.isoformat(),
+            'jobs_count': len(r.jobs)
+        } for r in reports])
+    except Exception as e:
+        logger.error(f"Error fetching reports: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    initialize_temp_file()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
-
-
-
-
+    app.run(debug=True)
