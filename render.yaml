@@ -3,8 +3,8 @@ services:
     name: rems-app
     runtime: python
     buildCommand: |
+      pip install --upgrade pip
       pip install -r requirements.txt
-      mkdir -p static
     startCommand: gunicorn app:app
     envVars:
       - key: DATABASE_URL
@@ -23,7 +23,19 @@ services:
         value: emergencyrepairsmpet@gmail.com
       - key: EMAIL_TO
         value: a.abdulrazzaq@medrepair.eu
+      - key: UPLOAD_FOLDER
+        value: uploads
+      - key: PYTHON_VERSION
+        value: 3.9.7
 
 databases:
   - name: rems-db
     plan: free
+    databaseName: rems
+    user: rems_user
+
+# Advanced properties (optional)
+    pgExtensions:
+      - pg_stat_statements
+    ipAllowList:
+      - 0.0.0.0/0
