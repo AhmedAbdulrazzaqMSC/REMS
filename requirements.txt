@@ -2,3 +2,4 @@ flask>=2.3.0
 flask-cors
 flask-sqlalchemy
 psycopg2-binary
+python-dotenv
