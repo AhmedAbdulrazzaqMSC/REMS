@@ -1,8 +1,27 @@
 services:
   - type: web
     name: rems-app
-    env: python
+    runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python App.py
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rems-db
+          property: connectionString
+      - key: SMTP_SERVER
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_USERNAME
+        value: emergencyrepairsmpet@gmail.com
+      - key: SMTP_PASSWORD
+        value: gvwe limw yzya oejc
+      - key: EMAIL_FROM
+        value: emergencyrepairsmpet@gmail.com
+      - key: EMAIL_TO
+        value: a.abdulrazzaq@medrepair.eu
+
+databases:
+  - name: rems-db
     plan: free
-    autoDeploy: true
