@@ -11,18 +11,18 @@ from datetime import datetime
 import logging
 from werkzeug.utils import secure_filename
 
-# Initialize Flask app with enhanced configuration
-app = Flask(__name__, static_folder=None)  # Disable default static file handling
+# Initialize Flask app
+app = Flask(__name__, static_folder=None)
 CORS(app, resources={
-    r"/api/*": {"origins": "*"},  # Allow all origins for API routes
-    r"/static/*": {"origins": "*"}  # Allow static files
+    r"/api/*": {"origins": "*"},
+    r"/static/*": {"origins": "*"}
 })
 
 # ======================
-# Enhanced Configuration
+# Configuration
 # ======================
 
-# Database Configuration with connection pooling
+# Database Configuration
 db_url = os.environ.get('DATABASE_URL', '')
 if not db_url:
     raise RuntimeError("DATABASE_URL environment variable is not set")
@@ -38,156 +38,175 @@ app.config.update({
         'pool_recycle': 300,
         'pool_pre_ping': True
     },
-    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024,  # 16MB
-    'UPLOAD_FOLDER': os.path.join(os.getcwd(), 'uploads')
+    'UPLOAD_FOLDER': os.path.join(os.getcwd(), 'uploads'),
+    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024  # 16MB
 })
 
-# Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Initialize database with improved settings
 db = SQLAlchemy(app)
 
 # ======================
-# Database Models (Optimized)
+# Database Models
 # ======================
 
 class RepairReport(db.Model):
     __tablename__ = 'repair_reports'
     id = db.Column(db.Integer, primary_key=True)
-    # [Previous columns remain the same...]
-    
-    # Indexes for performance
-    __table_args__ = (
-        db.Index('ix_container_number', 'container_number'),
-        db.Index('ix_report_date', 'report_date'),
-    )
+    container_number = db.Column(db.String(11), nullable=False)
+    # ... (other columns remain unchanged)
 
-# [Other model definitions remain the same...]
+class RepairJob(db.Model):
+    __tablename__ = 'repair_jobs'
+    id = db.Column(db.Integer, primary_key=True)
+    # ... (other columns remain unchanged)
 
-# ======================
-# Application Setup with Error Handling
-# ======================
-
-@app.before_first_request
-def initialize_database():
-    try:
-        with app.app_context():
-            db.create_all()
-            db.session.execute("SELECT 1")  # Test connection
-            app.logger.info("Database initialized successfully")
-    except Exception as e:
-        app.logger.critical(f"Database initialization failed: {str(e)}")
-        raise
+class Alarm(db.Model):
+    __tablename__ = 'alarms'
+    id = db.Column(db.Integer, primary_key=True)
+    # ... (other columns remain unchanged)
 
 # ======================
-# Enhanced Routes
+# Routes
 # ======================
 
 @app.route('/')
 def serve_index():
-    """Serve frontend entry point with cache control"""
-    return send_from_directory('.', 'index.html', cache_timeout=0)
+    return send_from_directory('.', 'index.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                             'favicon.ico', 
+                             mimetype='image/vnd.microsoft.icon')
 
 @app.route('/static/<path:path>')
 def serve_static(path):
-    """Serve static files with proper caching headers"""
     response = send_from_directory('.', path)
     response.headers['Cache-Control'] = 'public, max-age=3600'
     return response
 
 @app.route('/api/submit', methods=['POST'])
+@app.route('/submit', methods=['POST'])  # Backwards compatibility
 def submit_report():
-    """Enhanced submission endpoint with transaction management"""
     try:
-        # Validate content type
         if not request.is_json and not request.form:
             return jsonify({"status": "error", "message": "Unsupported content type"}), 415
 
-        with db.session.begin_nested():  # Use nested transaction
-            form_data = request.form if request.form else request.get_json()
-            files = request.files
-            
-            # [Previous validation and processing logic...]
-            
-            # Process data
-            report = process_report_data(form_data)
-            process_jobs(report, form_data)
-            process_alarms(report, form_data)
-            
-            # Handle file uploads
-            saved_files = handle_file_uploads(files)
-            
-            # Send email (async in production)
-            if os.environ.get('FLASK_ENV') != 'testing':
-                send_report_email(report, saved_files)
-            
-            db.session.commit()
-            
-            return jsonify({
-                "status": "success",
-                "message": "Report submitted successfully",
-                "report_id": report.id
-            })
+        form_data = request.form if request.form else request.get_json()
+        files = request.files
+        
+        # Validate container number
+        container_nr = form_data.get('containernr', '')
+        if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+            return jsonify({"status": "error", "message": "Invalid container number format"}), 400
 
-    except ValueError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        # Process report data
+        report = RepairReport(
+            container_number=container_nr,
+            report_date=datetime.strptime(form_data.get('datum'), '%Y-%m-%d').date(),
+            # ... (other fields)
+        )
+        db.session.add(report)
+        
+        # Process jobs and alarms
+        # ... (your existing logic)
+
+        # Process file uploads
+        saved_files = []
+        for file_key, file in files.items():
+            if file.filename == '':
+                continue
+                
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                saved_files.append(filepath)
+
+        # Send email
+        try:
+            send_email(
+                subject=f"REMS Report - {container_nr}",
+                body=generate_email_content(form_data, saved_files),
+                attachments=saved_files
+            )
+        except Exception as e:
+            app.logger.error(f"Email failed: {str(e)}")
+
+        db.session.commit()
+        return jsonify({
+            "status": "success", 
+            "message": "Report submitted",
+            "report_id": report.id
+        })
+
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"Report submission failed: {str(e)}", exc_info=True)
+        app.logger.error(f"Submission failed: {str(e)}")
         return jsonify({
             "status": "error",
             "message": "Internal server error"
         }), 500
 
 # ======================
-# Refactored Helper Functions
+# Helper Functions
 # ======================
 
-def process_report_data(form_data):
-    """Create and validate report entity"""
-    # [Validation and creation logic...]
-    return report
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def handle_file_uploads(files):
-    """Process uploaded files with cleanup guarantee"""
-    saved_files = []
+def generate_email_content(form_data, attachments):
+    # ... (your existing email template logic)
+
+def send_email(subject, body, attachments):
     try:
-        # [File processing logic...]
-        return saved_files
+        msg = MIMEMultipart()
+        msg['From'] = os.getenv('EMAIL_FROM')
+        msg['To'] = os.getenv('EMAIL_TO')
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        for filepath in attachments:
+            with open(filepath, 'rb') as f:
+                if filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    img = MIMEImage(f.read())
+                    img.add_header('Content-Disposition', 'attachment', 
+                                 filename=os.path.basename(filepath))
+                    msg.attach(img)
+                else:
+                    part = MIMEApplication(f.read(), 
+                                         Name=os.path.basename(filepath))
+                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
+                    msg.attach(part)
+        
+        with smtplib.SMTP_SSL(os.getenv('SMTP_SERVER'), int(os.getenv('SMTP_PORT'))) as server:
+            server.login(os.getenv('SMTP_USERNAME'), os.getenv('SMTP_PASSWORD'))
+            server.send_message(msg)
+            
     except Exception as e:
-        # Cleanup any partially saved files
-        for file_info in saved_files:
-            try:
-                os.remove(file_info['path'])
-            except:
-                pass
+        app.logger.error(f"Email error: {str(e)}")
         raise
 
-def send_report_email(report, attachments):
-    """Send email with error handling"""
-    try:
-        # [Email sending logic...]
-    except Exception as e:
-        app.logger.error(f"Email sending failed (report {report.id}): {str(e)}")
-        # Continue without failing the request
+# ======================
+# Startup
+# ======================
 
-# ======================
-# Production-Ready Entry Point
-# ======================
+@app.before_first_request
+def initialize_database():
+    try:
+        db.create_all()
+        db.session.execute("SELECT 1")
+        app.logger.info("Database initialized")
+    except Exception as e:
+        app.logger.critical(f"Database failed: {str(e)}")
+        raise
 
 if __name__ == '__main__':
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
-    # Start application
     port = int(os.environ.get('PORT', 5000))
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        threaded=True,
-        debug=os.environ.get('FLASK_ENV') == 'development'
-    )
+    app.run(host='0.0.0.0', port=port)
