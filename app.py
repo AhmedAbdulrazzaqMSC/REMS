@@ -246,30 +246,56 @@ def generate_email_content(form_data, attachments):
 
 def send_email(subject, body, attachments):
     try:
+        # Email configuration (now hardcoded per your request)
+        SMTP_SERVER = 'smtp.gmail.com'
+        SMTP_PORT = 587
+        SMTP_USERNAME = 'emergencyrepairsmpet@gmail.com'
+        SMTP_PASSWORD = 'gvwe limw yzya oejc'
+        EMAIL_FROM = 'emergencyrepairsmpet@gmail.com'
+        EMAIL_TO = 'a.abdulrazzaq@medrepair.eu'
+
+        # Prepare email
         msg = MIMEMultipart()
-        msg['From'] = os.getenv('EMAIL_FROM')
-        msg['To'] = os.getenv('EMAIL_TO')
-        msg['Subject'] = subject
+        msg['From'] = EMAIL_FROM
+        msg['To'] = EMAIL_TO
+        msg['Subject'] = f"Herstelmail ({subject})"  # Added container number to subject
+
+        # HTML email body
         msg.attach(MIMEText(body, 'html'))
 
+        # Attach files if any
         for filepath in attachments:
-            with open(filepath, 'rb') as f:
-                if filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                    img = MIMEImage(f.read())
-                    img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(filepath))
-                    msg.attach(img)
-                else:
-                    part = MIMEApplication(f.read(), Name=os.path.basename(filepath))
-                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
-                    msg.attach(part)
+            try:
+                with open(filepath, 'rb') as f:
+                    if filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                        img = MIMEImage(f.read())
+                        img.add_header('Content-Disposition', 'attachment', 
+                                     filename=os.path.basename(filepath))
+                        msg.attach(img)
+                    else:
+                        part = MIMEApplication(f.read(), 
+                                             Name=os.path.basename(filepath))
+                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
+                        msg.attach(part)
+            except Exception as file_error:
+                app.logger.error(f"Failed to attach {filepath}: {str(file_error)}")
 
-        with smtplib.SMTP_SSL(os.getenv('SMTP_SERVER'), int(os.getenv('SMTP_PORT'))) as server:
-            server.login(os.getenv('SMTP_USERNAME'), os.getenv('SMTP_PASSWORD'))
-            server.send_message(msg)
-    except Exception as e:
-        app.logger.error(f"Email error: {str(e)}")
+        # Send email with error handling
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
+            smtp.starttls()  # Enable TLS encryption
+            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+            smtp.send_message(msg)
+            app.logger.info(f"Email sent successfully to {EMAIL_TO}")
+
+    except smtplib.SMTPAuthenticationError:
+        app.logger.error("Email failed: SMTP authentication error (check username/password)")
         raise
-
+    except smtplib.SMTPException as e:
+        app.logger.error(f"Email failed: SMTP error - {str(e)}")
+        raise
+    except Exception as e:
+        app.logger.error(f"Email failed: {str(e)}", exc_info=True)
+        raise
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
@@ -277,3 +303,4 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
