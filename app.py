@@ -403,18 +403,29 @@ def send_email(subject, body, attachments):
         SMTP_SERVER = 'smtp.gmail.com'
         SMTP_PORT = 587
         SMTP_USERNAME = 'emergencyrepairsmpet@gmail.com'
-        SMTP_PASSWORD = 'gvwe limw yzya oejc'
+        SMTP_PASSWORD = 'gvwe limw yzya oejc'  # Move to environment variables in production!
         EMAIL_FROM = 'emergencyrepairsmpet@gmail.com'
-        EMAIL_TO = 'REEFER.1742@MPET.BE, BE900-BE900-ForemanMedrepairMonitoring@medrepair.eu, BE900-ReeferAdministrationMedrepair@medrepair.eu, fouzi.elyazidi@medrepair.eu, jroets@medrepair.eu, gillis.keustermans@medrepair.eu, a.abdulrazzaq@medrepair.eu'
+        
+        # Recipients (comma-separated string for headers, list for sending)
+        EMAIL_TO = [
+            'REEFER.1742@MPET.BE',
+            'BE900-BE900-ForemanMedrepairMonitoring@medrepair.eu',
+            'BE900-ReeferAdministrationMedrepair@medrepair.eu',
+            'fouzi.elyazidi@medrepair.eu',
+            'jroets@medrepair.eu',
+            'gillis.keustermans@medrepair.eu',
+            'a.abdulrazzaq@medrepair.eu'
+        ]
+        email_to_str = ', '.join(EMAIL_TO)  # For header
 
         # Prepare email
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
-        msg['To'] = EMAIL_TO
+        msg['To'] = email_to_str  # Comma-separated string for header
         msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
         msg.attach(MIMEText(body, 'html'))
 
-        # Attach files
+        # Attach files (your existing code works perfectly)
         for filepath in attachments:
             try:
                 with open(filepath, 'rb') as f:
@@ -431,12 +442,12 @@ def send_email(subject, body, attachments):
             except Exception as file_error:
                 app.logger.error(f"Failed to attach {filepath}: {str(file_error)}")
 
-        # Send email
+        # Send email - CRITICAL FIX: Use sendmail() with recipient list
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
             smtp.starttls()
             smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-            smtp.send_message(msg)
-            app.logger.info(f"Email sent successfully to {EMAIL_TO}")
+            smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())  # Use list of emails here
+            app.logger.info(f"Email sent to: {EMAIL_TO}")
 
     except smtplib.SMTPAuthenticationError:
         app.logger.error("Email failed: SMTP authentication error (check username/password)")
@@ -447,7 +458,6 @@ def send_email(subject, body, attachments):
     except Exception as e:
         app.logger.error(f"Email failed: {str(e)}", exc_info=True)
         raise
-
 # ======================
 # Start Application
 # ======================
@@ -459,5 +469,6 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
 
