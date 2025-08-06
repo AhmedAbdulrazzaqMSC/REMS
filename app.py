@@ -405,7 +405,7 @@ def send_email(subject, body, attachments):
         SMTP_USERNAME = 'emergencyrepairsmpet@gmail.com'
         SMTP_PASSWORD = 'gvwe limw yzya oejc'
         EMAIL_FROM = 'emergencyrepairsmpet@gmail.com'
-        EMAIL_TO = 'a.abdulrazzaq@medrepair.eu'
+        EMAIL_TO = 'REEFER.1742@MPET.BE, BE900-BE900-ForemanMedrepairMonitoring@medrepair.eu, BE900-ReeferAdministrationMedrepair@medrepair.eu, fouzi.elyazidi@medrepair.eu, jroets@medrepair.eu, gillis.keustermans@medrepair.eu, a.abdulrazzaq@medrepair.eu'
 
         # Prepare email
         msg = MIMEMultipart()
@@ -459,4 +459,5 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
