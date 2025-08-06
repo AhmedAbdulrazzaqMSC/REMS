@@ -163,18 +163,28 @@ def submit_report():
         # Process jobs
         job_count = int(form_data.get('job_count', 0))
         for i in range(job_count):
-            prefix = f'job[{i}]'
+            job_data = {
+                'code': form_data.get(f'job[{i}][code]'),
+                'description': form_data.get(f'job[{i}][description]'),
+                'part_number': form_data.get(f'job[{i}][part_number]'),
+                'part_description': form_data.get(f'job[{i}][part_description]'),
+                'quantity': form_data.get(f'job[{i}][quantity]'),
+                'damage_type': form_data.get(f'job[{i}][damage_type]'),
+                'old_serial': form_data.get(f'job[{i}][old_serial]'),
+                'new_serial': form_data.get(f'job[{i}][new_serial]'),
+                'labor_hours': form_data.get(f'job[{i}][labor_hours]')
+            }
             job = RepairJob(
                 report_id=report.id,
-                job_code=form_data.get(f'{prefix}[code]'),
-                description=form_data.get(f'{prefix}[description]'),
-                part_number=form_data.get(f'{prefix}[part_number]'),
-                part_description=form_data.get(f'{prefix}[part_description]'),
-                quantity=int(form_data.get(f'{prefix}[quantity]', 1)),
-                damage_type=form_data.get(f'{prefix}[damage_type]'),
-                old_serial=form_data.get(f'{prefix}[old_serial]'),
-                new_serial=form_data.get(f'{prefix}[new_serial]'),
-                labor_hours=float(form_data.get(f'{prefix}[labor_hours]', 0))
+                job_code=job_data['code'],
+                description=job_data['description'],
+                part_number=job_data['part_number'],
+                part_description=job_data['part_description'],
+                quantity=int(job_data['quantity'] or 1),
+                damage_type=job_data['damage_type'],
+                old_serial=job_data['old_serial'],
+                new_serial=job_data['new_serial'],
+                labor_hours=float(job_data['labor_hours'] or 0)
             )
             db.session.add(job)
         
@@ -198,8 +208,8 @@ def submit_report():
         # Send email
         try:
             send_email(
-                subject=container_nr,  # Container number for subject
-                body=generate_email_content(form_data, saved_files),
+                subject=container_nr,
+                body=generate_email_content(form_data, request.form.getlist('alarm[]'), job_count),
                 attachments=saved_files
             )
         except Exception as e:
@@ -227,29 +237,172 @@ def submit_report():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def generate_email_content(form_data, attachments):
-    before_photos = len([f for f in attachments if 'before' in f.lower()])
-    after_photos = len([f for f in attachments if 'after' in f.lower()])
+def generate_email_content(form_data, alarms, job_count):
+    # Count photos (assuming files are named with 'voor'/'na')
+    photos_voor = len([1 for key in form_data.keys() if 'fotos_voor' in key.lower()])
+    photos_na = len([1 for key in form_data.keys() if 'fotos_na' in key.lower()])
+    
+    # Generate jobs HTML
+    jobs_html = ""
+    for i in range(job_count):
+        jobs_html += f"""
+        <div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+            <h4 style="margin-top: 0;">Job {i+1}: {form_data.get(f'job[{i}][description]', 'N/A')}</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 5px; width: 150px;"><strong>Code:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][code]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Part Number:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][part_number]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Part Description:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][part_description]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Quantity:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][quantity]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Damage Type:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][damage_type]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Old Serial:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][old_serial]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>New Serial:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][new_serial]', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px;"><strong>Labor Hours:</strong></td>
+                    <td style="padding: 5px;">{form_data.get(f'job[{i}][labor_hours]', 'N/A')}</td>
+                </tr>
+            </table>
+        </div>
+        """
+    
+    # Generate alarms HTML
+    alarms_html = "<ul>" + "".join([f"<li>{alarm}</li>" for alarm in alarms if alarm.strip()]) + "</ul>"
     
     return f"""
     <html>
-    <body style="font-family: Arial, sans-serif;">
-        <h2>REMS Repair Report</h2>
-        <p><strong>Container:</strong> {form_data.get('containernr')}</p>
-        <p><strong>Date:</strong> {form_data.get('datum')}</p>
-        <p><strong>Technician:</strong> {form_data.get('naam')}</p>
-        <p><strong>Photos:</strong> {before_photos} before, {after_photos} after</p>
-        <h3>Problem Description</h3>
-        <p>{form_data.get('probleem') or 'N/A'}</p>
-        <h3>Resolution</h3>
-        <p>{form_data.get('opmerkingen') or 'N/A'}</p>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto;">
+        <div style="background-color: #0066cc; padding: 20px; color: white;">
+            <h1 style="margin: 0;">REMS Repair Report</h1>
+        </div>
+        
+        <div style="padding: 20px;">
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Container Information</h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 8px; width: 200px;"><strong>Container Number:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('containernr', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Date:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('datum', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Technician:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('naam', 'N/A')}</td>
+                </tr>
+            </table>
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Unit Details</h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 8px; width: 200px;"><strong>Model:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('model', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Serial Number:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('serienr', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Warranty ID:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('warranty_id', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Warranty Status:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('garantie', 'N/A')}</td>
+                </tr>
+            </table>
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Technical Data</h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 8px; width: 200px;"><strong>Setpoint:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('setpoint', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Vents:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('vents', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Humidity:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('hum', 'N/A')}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Ambient Temp:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('ambient', 'N/A')}°C</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Supply Temp Before:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('supply_voor', 'N/A')}°C</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Supply Temp After:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('supply_na', 'N/A')}°C</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Return Temp Before:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('return_voor', 'N/A')}°C</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Return Temp After:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('return_na', 'N/A')}°C</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Temp in Range:</strong></td>
+                    <td style="padding: 8px;">{form_data.get('temp_in_range', 'N/A')}</td>
+                </tr>
+            </table>
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Problem & Resolution</h2>
+            <div style="background: #f5f5f5; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+                <h3 style="margin-top: 0;">Problem Description</h3>
+                <p>{form_data.get('probleem', 'N/A')}</p>
+                
+                <h3>Comments/Resolution</h3>
+                <p>{form_data.get('opmerkingen', 'N/A')}</p>
+            </div>
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Repair Jobs</h2>
+            {jobs_html if jobs_html else "<p>No repair jobs recorded</p>"}
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Alarms</h2>
+            {alarms_html if alarms else "<p>No alarms recorded</p>"}
+            
+            <h2 style="color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 5px;">Photos</h2>
+            <p><strong>Before Repair:</strong> {photos_voor} photos</p>
+            <p><strong>After Repair:</strong> {photos_na} photos</p>
+            
+            <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; color: #666; font-size: 0.9em;">
+                <p>This report was automatically generated by the REMS system.</p>
+                <p>Report ID: {form_data.get('containernr', '')}-{datetime.now().strftime('%Y%m%d')}</p>
+            </div>
+        </div>
     </body>
     </html>
     """
 
 def send_email(subject, body, attachments):
     try:
-        # Email configuration (hardcoded as provided)
+        # Email configuration
         SMTP_SERVER = 'smtp.gmail.com'
         SMTP_PORT = 587
         SMTP_USERNAME = 'emergencyrepairsmpet@gmail.com'
@@ -261,7 +414,7 @@ def send_email(subject, body, attachments):
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
-        msg['Subject'] = f"Herstelmail ({subject})"  # Custom subject format
+        msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
         msg.attach(MIMEText(body, 'html'))
 
         # Attach files
@@ -283,7 +436,7 @@ def send_email(subject, body, attachments):
 
         # Send email
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
-            smtp.starttls()  # Enable TLS
+            smtp.starttls()
             smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
             smtp.send_message(msg)
             app.logger.info(f"Email sent successfully to {EMAIL_TO}")
