@@ -64,9 +64,9 @@ class RepairReport(db.Model):
     vents = db.Column(db.String(50))
     humidity = db.Column(db.String(50))
     ambient_temp = db.Column(db.Float)
-    supply_temp_before = db.Column(db.Float)
+    supply_temp_before = db.Column(db.String(50))
     supply_temp_after = db.Column(db.Float)
-    return_temp_before = db.Column(db.Float)
+    return_temp_before = db.Column(db.String(50))
     return_temp_after = db.Column(db.Float)
     temp_in_range = db.Column(db.String(50))
     problem_description = db.Column(db.Text)
@@ -469,6 +469,7 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
 
 
