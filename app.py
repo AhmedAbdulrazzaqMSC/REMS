@@ -62,11 +62,11 @@ class RepairReport(db.Model):
     warranty_status = db.Column(db.String(100))
     setpoint = db.Column(db.Float)
     vents = db.Column(db.String(50))
-    humidity = db.Column(db.Float)
+    humidity = db.Column(db.String(50))
     ambient_temp = db.Column(db.Float)
-    supply_temp_before = db.Column(db.Float)
+    supply_temp_before = db.Column(db.String(50))
     supply_temp_after = db.Column(db.Float)
-    return_temp_before = db.Column(db.Float)
+    return_temp_before = db.Column(db.String(50))
     return_temp_after = db.Column(db.Float)
     temp_in_range = db.Column(db.String(50))
     problem_description = db.Column(db.Text)
@@ -149,9 +149,9 @@ def submit_report():
             vents=form_data.get('vents'),
             humidity=form_data.get('hum'),
             ambient_temp=float(form_data.get('ambient', 0)),
-            supply_temp_before=float(form_data.get('supply_voor', 0)),
+            supply_temp_before=get_temp_value('supply_voor'),
             supply_temp_after=float(form_data.get('supply_na', 0)),
-            return_temp_before=float(form_data.get('return_voor', 0)),
+            supply_temp_before=get_temp_value('supply_voor'),
             return_temp_after=float(form_data.get('return_na', 0)),
             temp_in_range=form_data.get('temp_in_range'),
             problem_description=form_data.get('probleem'),
@@ -469,6 +469,7 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
 
 
