@@ -60,14 +60,14 @@ class RepairReport(db.Model):
     serial_number = db.Column(db.String(100))
     warranty_id = db.Column(db.String(100))
     warranty_status = db.Column(db.String(100))
-    setpoint = db.Column(db.Float)
+    setpoint = db.Column(db.String(50))  # Changed to String
     vents = db.Column(db.String(50))
-    humidity = db.Column(db.String(50))
-    ambient_temp = db.Column(db.Float)
-    supply_temp_before = db.Column(db.String(50))
-    supply_temp_after = db.Column(db.Float)
-    return_temp_before = db.Column(db.String(50))
-    return_temp_after = db.Column(db.Float)
+    humidity = db.Column(db.String(50))  # Changed to String
+    ambient_temp = db.Column(db.String(50))  # Changed to String
+    supply_temp_before = db.Column(db.String(50))  # Changed to String
+    supply_temp_after = db.Column(db.String(50))  # Changed to String
+    return_temp_before = db.Column(db.String(50))  # Changed to String
+    return_temp_after = db.Column(db.String(50))  # Changed to String
     temp_in_range = db.Column(db.String(50))
     problem_description = db.Column(db.Text)
     comments = db.Column(db.Text)
@@ -136,7 +136,19 @@ def submit_report():
         if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
             return jsonify({"status": "error", "message": "Invalid container number format"}), 400
 
-        # Create report
+        # Helper function to safely get temperature values
+        def get_temp_value(key):
+            value = form_data.get(key, '').strip()
+            if value.lower() == 'off' or not value:
+                return value
+            try:
+                # Try to convert to float to validate it's a number
+                float(value)
+                return value
+            except ValueError:
+                return value  # Return as-is if not a number
+
+        # Create report with string fields for temperatures
         report = RepairReport(
             container_number=container_nr,
             report_date=datetime.strptime(form_data.get('datum'), '%Y-%m-%d').date(),
@@ -145,14 +157,14 @@ def submit_report():
             serial_number=form_data.get('serienr'),
             warranty_id=form_data.get('warranty_id'),
             warranty_status=form_data.get('garantie'),
-            setpoint=float(form_data.get('setpoint', 0)),
+            setpoint=get_temp_value('setpoint'),
             vents=form_data.get('vents'),
-            humidity=form_data.get('hum'),
-            ambient_temp=float(form_data.get('ambient', 0)),
+            humidity=get_temp_value('hum'),
+            ambient_temp=get_temp_value('ambient'),
             supply_temp_before=get_temp_value('supply_voor'),
-            supply_temp_after=float(form_data.get('supply_na', 0)),
-            supply_temp_before=get_temp_value('supply_voor'),
-            return_temp_after=float(form_data.get('return_na', 0)),
+            supply_temp_after=get_temp_value('supply_na'),
+            return_temp_before=get_temp_value('return_voor'),
+            return_temp_after=get_temp_value('return_na'),
             temp_in_range=form_data.get('temp_in_range'),
             problem_description=form_data.get('probleem'),
             comments=form_data.get('opmerkingen')
@@ -348,23 +360,23 @@ def generate_email_content(form_data, alarms, job_count):
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Ambient Temp:</strong></td>
-                    <td style="padding: 8px;">{form_data.get('ambient', 'N/A')}°C</td>
+                    <td style="padding: 8px;">{form_data.get('ambient', 'N/A')}</td>
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Supply Temp Before:</strong></td>
-                    <td style="padding: 8px;">{form_data.get('supply_voor', 'N/A')}°C</td>
+                    <td style="padding: 8px;">{form_data.get('supply_voor', 'N/A')}</td>
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Supply Temp After:</strong></td>
-                    <td style="padding: 8px;">{form_data.get('supply_na', 'N/A')}°C</td>
+                    <td style="padding: 8px;">{form_data.get('supply_na', 'N/A')}</td>
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Return Temp Before:</strong></td>
-                    <td style="padding: 8px;">{form_data.get('return_voor', 'N/A')}°C</td>
+                    <td style="padding: 8px;">{form_data.get('return_voor', 'N/A')}</td>
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Return Temp After:</strong></td>
-                    <td style="padding: 8px;">{form_data.get('return_na', 'N/A')}°C</td>
+                    <td style="padding: 8px;">{form_data.get('return_na', 'N/A')}</td>
                 </tr>
                 <tr>
                     <td style="padding: 8px;"><strong>Temp in Range:</strong></td>
@@ -425,7 +437,7 @@ def send_email(subject, body, attachments):
         msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
         msg.attach(MIMEText(body, 'html'))
 
-        # Attach files (your existing code works perfectly)
+        # Attach files
         for filepath in attachments:
             try:
                 with open(filepath, 'rb') as f:
@@ -442,11 +454,11 @@ def send_email(subject, body, attachments):
             except Exception as file_error:
                 app.logger.error(f"Failed to attach {filepath}: {str(file_error)}")
 
-        # Send email - CRITICAL FIX: Use sendmail() with recipient list
+        # Send email
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
             smtp.starttls()
             smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-            smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())  # Use list of emails here
+            smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
             app.logger.info(f"Email sent to: {EMAIL_TO}")
 
     except smtplib.SMTPAuthenticationError:
@@ -458,6 +470,7 @@ def send_email(subject, body, attachments):
     except Exception as e:
         app.logger.error(f"Email failed: {str(e)}", exc_info=True)
         raise
+
 # ======================
 # Start Application
 # ======================
@@ -469,9 +482,3 @@ if __name__ == '__main__':
     )
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
-
-
-
-
