@@ -40,12 +40,22 @@
     @media (max-width: 768px) {
       form { grid-template-columns: 1fr; }
     }
+    #loginOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 9999;
+    }
+    #loginBox {
+      background: white; padding: 20px; border-radius: 8px;
+      max-width: 300px; width: 90%;
+    }
+    #loginBox input { width: 100%; margin-bottom: 10px; padding: 8px; }
+    #loginError { color: red; display: none; font-size: 14px; }
+    .job-section { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
   </style>
-
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
 </head>
 <body>
 <header>
@@ -94,8 +104,21 @@
 <button class="add-button" onclick="addJob()" type="button">Add Job</button><button class="add-button" onclick="addUndefinedJob()" type="button">Add Undefined Job</button>
 </div>
 <button class="full-width" type="submit">Submit Report</button>
-</input></form>
+</form>
 </main>
+
+<div id="loginOverlay">
+<div id="loginBox">
+<h3>Login</h3>
+<input id="username" placeholder="Username" type="text"/>
+<input id="password" placeholder="Password" type="password"/>
+<div id="loginError">Invalid credentials</div>
+<button onclick="validateLogin()">Login</button>
+</div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 const jobData = [
   { code: "A011A", part: "38-00557-00", description: "Fan, Evaporator", hours: 0.5 },
@@ -141,12 +164,61 @@ const jobData = [
   { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
 ];
 
+const credentials = {
+  "Brahim Moukafih": "bm123",
+  "Christophe Jongenelen": "cj123",
+  "Gillis Keustermans": "Gillis Keustermans",
+  "Brahim Arebbat": "bar174",
+  "Ronny Joosen": "roj174",
+  "Filip Meys": "flm174",
+  "Mohamed El Faroussi": "mohfr174",
+  "Mohamed Moukafih": "mohkf174",
+  "Maksym Karalash": "mks147",
+  "Mustafa Kahraman": "mstk174",
+  "Hassan Ouchan": "ho123",
+  "Marc Eyckmans": "me123",
+  "Mohammed Ballafkih": "mb123",
+  "Yannick Standaert": "ys123",
+  "Ahmed Abdulrazzaq": "ahab174",
+  "Youssef Stitou": "yst123",
+  "Admin": "admin123"
+};
+
+// Check login status on page load
+document.addEventListener("DOMContentLoaded", function() {
+  const loggedInUser = localStorage.getItem("loggedInUser");
+  if (loggedInUser) {
+    document.getElementById('naam').value = loggedInUser;
+    document.getElementById('loginOverlay').style.display = 'none';
+    addJob(); // Initialize with one job section
+  } else {
+    document.getElementById('loginOverlay').style.display = 'flex';
+  }
+});
+
+function validateLogin() {
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value.trim();
+  
+  if (credentials[u] && credentials[u] === p) {
+    document.getElementById('naam').value = u;
+    document.getElementById('loginOverlay').style.display = 'none';
+    localStorage.setItem("loggedInUser", u); // Store username
+    addJob(); // Initialize with one job section
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+function logout() {
+  localStorage.removeItem("loggedInUser");
+  location.reload();
+}
 
 function addJob() {
   const container = document.querySelector("#jobContainer fieldset");
   const fieldset = document.createElement("fieldset");
-fieldset.classList.add("job-section");
-
+  fieldset.classList.add("job-section");
 
   let options = "";
   jobData.forEach(j => {
@@ -167,34 +239,32 @@ fieldset.classList.add("job-section");
     <input type="text" name="part_description[]" readonly>
     <label>Quantity</label>
     <input type="number" name="quantity[]">
-
-<label>Damage Type</label>
-<select name="damage_type[]">
-  <option value="">Select</option>
-  <option value="BK">BK - Blocked</option>
-  <option value="BL">BL - Blowout</option>
-  <option value="BN">BN - Burned</option>
-  <option value="BR">BR - Broken/Split</option>
-  <option value="CO">CO - Corroded/Rusty</option>
-  <option value="CT">CT - Contaminated</option>
-  <option value="CU">CU - Cut</option>
-  <option value="CW">CW - Cracked weld</option>
-  <option value="DT">DT - Dent</option>
-  <option value="DY">DY - Dirty</option>
-  <option value="IR">IR - Improper Repair</option>
-  <option value="LF">LF - Low Fluid Level</option>
-  <option value="LK">LK - Leak</option>
-  <option value="LO">LO - Loose</option>
-  <option value="MS">MS - Missing/Lost</option>
-  <option value="OC">OC - Out of calibration</option>
-  <option value="OL">OL - Oil saturated</option>
-  <option value="RA">RA - Remove For Access</option>
-  <option value="RN">RN - Repair Necessary</option>
-  <option value="SH">SH - Short/Open circuit</option>
-  <option value="TR">TR - Test Required</option>
-  <option value="ZZ">ZZ - Not Applicable</option>
-</select>
-
+    <label>Damage Type</label>
+    <select name="damage_type[]">
+      <option value="">Select</option>
+      <option value="BK">BK - Blocked</option>
+      <option value="BL">BL - Blowout</option>
+      <option value="BN">BN - Burned</option>
+      <option value="BR">BR - Broken/Split</option>
+      <option value="CO">CO - Corroded/Rusty</option>
+      <option value="CT">CT - Contaminated</option>
+      <option value="CU">CU - Cut</option>
+      <option value="CW">CW - Cracked weld</option>
+      <option value="DT">DT - Dent</option>
+      <option value="DY">DY - Dirty</option>
+      <option value="IR">IR - Improper Repair</option>
+      <option value="LF">LF - Low Fluid Level</option>
+      <option value="LK">LK - Leak</option>
+      <option value="LO">LO - Loose</option>
+      <option value="MS">MS - Missing/Lost</option>
+      <option value="OC">OC - Out of calibration</option>
+      <option value="OL">OL - Oil saturated</option>
+      <option value="RA">RA - Remove For Access</option>
+      <option value="RN">RN - Repair Necessary</option>
+      <option value="SH">SH - Short/Open circuit</option>
+      <option value="TR">TR - Test Required</option>
+      <option value="ZZ">ZZ - Not Applicable</option>
+    </select>
     <label>Old Serial Number</label>
     <input type="text" name="serial_old[]">
     <label>New Serial Number</label>
@@ -214,8 +284,7 @@ function fillJobData(selectElem) {
   container.querySelector('input[name="part_number[]"]').value = job.part;
   container.querySelector('input[name="part_description[]"]').value = job.description;
   container.querySelector('input[name="labor_hours[]"]').value = job.hours;
-selectElem.setAttribute("data-description", job.description);
-
+  selectElem.setAttribute("data-description", job.description);
 }
 
 function addPhoto(sectionId) {
@@ -235,11 +304,10 @@ function addAlarm() {
   container.appendChild(input);
 }
 
-
 function addUndefinedJob() {
   const container = document.querySelector("#jobContainer fieldset");
   const fieldset = document.createElement("fieldset");
-fieldset.classList.add("job-section");  
+  fieldset.classList.add("job-section");  
 
   fieldset.innerHTML = `
     <label>Job Description</label>
@@ -252,34 +320,32 @@ fieldset.classList.add("job-section");
     <input type="text" name="part_description[]">
     <label>Quantity</label>
     <input type="number" name="quantity[]">
-
-<label>Damage Type</label>
-<select name="damage_type[]">
-  <option value="">Select</option>
-  <option value="BK">BK - Blocked</option>
-  <option value="BL">BL - Blowout</option>
-  <option value="BN">BN - Burned</option>
-  <option value="BR">BR - Broken/Split</option>
-  <option value="CO">CO - Corroded/Rusty</option>
-  <option value="CT">CT - Contaminated</option>
-  <option value="CU">CU - Cut</option>
-  <option value="CW">CW - Cracked weld</option>
-  <option value="DT">DT - Dent</option>
-  <option value="DY">DY - Dirty</option>
-  <option value="IR">IR - Improper Repair</option>
-  <option value="LF">LF - Low Fluid Level</option>
-  <option value="LK">LK - Leak</option>
-  <option value="LO">LO - Loose</option>
-  <option value="MS">MS - Missing/Lost</option>
-  <option value="OC">OC - Out of calibration</option>
-  <option value="OL">OL - Oil saturated</option>
-  <option value="RA">RA - Remove For Access</option>
-  <option value="RN">RN - Repair Necessary</option>
-  <option value="SH">SH - Short/Open circuit</option>
-  <option value="TR">TR - Test Required</option>
-  <option value="ZZ">ZZ - Not Applicable</option>
-</select>
-
+    <label>Damage Type</label>
+    <select name="damage_type[]">
+      <option value="">Select</option>
+      <option value="BK">BK - Blocked</option>
+      <option value="BL">BL - Blowout</option>
+      <option value="BN">BN - Burned</option>
+      <option value="BR">BR - Broken/Split</option>
+      <option value="CO">CO - Corroded/Rusty</option>
+      <option value="CT">CT - Contaminated</option>
+      <option value="CU">CU - Cut</option>
+      <option value="CW">CW - Cracked weld</option>
+      <option value="DT">DT - Dent</option>
+      <option value="DY">DY - Dirty</option>
+      <option value="IR">IR - Improper Repair</option>
+      <option value="LF">LF - Low Fluid Level</option>
+      <option value="LK">LK - Leak</option>
+      <option value="LO">LO - Loose</option>
+      <option value="MS">MS - Missing/Lost</option>
+      <option value="OC">OC - Out of calibration</option>
+      <option value="OL">OL - Oil saturated</option>
+      <option value="RA">RA - Remove For Access</option>
+      <option value="RN">RN - Repair Necessary</option>
+      <option value="SH">SH - Short/Open circuit</option>
+      <option value="TR">TR - Test Required</option>
+      <option value="ZZ">ZZ - Not Applicable</option>
+    </select>
     <label>Old Serial Number</label>
     <input type="text" name="serial_old[]">
     <label>New Serial Number</label>
@@ -291,139 +357,64 @@ fieldset.classList.add("job-section");
   $(fieldset).find('.job-select').select2({ width: '100%' });
 }
 
-window.onload = () => {
-  addJob();
-};
+async function submitRepair(event) {
+  event.preventDefault();
 
-function logout() {
-  localStorage.removeItem("loggedIn");
-  location.reload();
-}
-</script>
-<style>
-  #loginOverlay {
-    position: fixed;
-    top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(0,0,0,0.8);
-    display: flex; justify-content: center; align-items: center;
-    z-index: 9999;
-  }
-  #loginBox {
-    background: white; padding: 20px; border-radius: 8px;
-    max-width: 300px; width: 90%;
-  }
-  #loginBox input { width: 100%; margin-bottom: 10px; padding: 8px; }
-  #loginError { color: red; display: none; font-size: 14px; }
-</style>
-<div id="loginOverlay">
-<div id="loginBox">
-<h3>Login</h3>
-<input id="username" placeholder="Username" type="text"/>
-<input id="password" placeholder="Password" type="password"/>
-<div id="loginError">Invalid credentials</div>
-<button onclick="validateLogin()">Login</button>
-</div>
-</div>
-<script>
-  const credentials = {
-    "Brahim Moukafih": "bm123",
-    "Christophe Jongenelen": "cj123",
-    "Gillis Keustermans": "Gillis Keustermans",
-    "Brahim Arebbat": "bar174",
-    "Ronny Joosen": "roj174",
-    "Filip Meys": "flm174",
-    "Mohamed El Faroussi": "mohfr174",
-    "Mohamed Moukafih": "mohkf174",
-    "Maksym Karalash": "mks147",
-    "Mustafa Kahraman": "mstk174",
-    "Hassan Ouchan": "ho123",
-    "Marc Eyckmans": "me123",
-    "Mohammed Ballafkih": "mb123",
-    "Yannick Standaert": "ys123",
-    "Ahmed Abdulrazzaq": "ahab174",
-    "Youssef Stitou": "yst123",
-    "Admin": "admin123"
-  };
-  function validateLogin() {
-    const u = document.getElementById('username').value.trim();
-    const p = document.getElementById('password').value.trim();
-    if (credentials[u] && credentials[u] === p) {
-      document.getElementById('naam').value = u;
-      document.getElementById('loginOverlay').style.display = 'none';
-    } else {
-      document.getElementById('loginError').style.display = 'block';
-    }
-  }
-</script>
-<script>
-  function logout() {
-    localStorage.removeItem("loggedIn");
-    location.reload();
-  }
+  const form = document.getElementById("repairForm");
+  const formData = new FormData(form);
 
-  async function submitRepair(event) {
-    event.preventDefault();
+  formData.append("containernr", form.containernr.value);
+  formData.append("naam", form.naam.value);
+  formData.append("datum", form.datum.value);
+  formData.append("model", form.model.value);
+  formData.append("serienr", form.serienr.value);
+  formData.append("warranty_id", form.warranty_id.value);
+  formData.append("garantie", form.garantie.value);
+  formData.append("setpoint", form.setpoint.value);
+  formData.append("vents", form.vents.value);
+  formData.append("hum", form.hum.value);
+  formData.append("ambient", form.ambient.value);
+  formData.append("supply_voor", form.supply_voor.value);
+  formData.append("supply_na", form.supply_na.value);
+  formData.append("return_voor", form.return_voor.value);
+  formData.append("return_na", form.return_na.value);
+  formData.append("temp_in_range", form.temp_in_range.value);
+  formData.append("probleem", form.probleem.value);
+  formData.append("opmerkingen", form.opmerkingen.value);
 
-    const form = document.getElementById("repairForm");
-    const formData = new FormData(form);
+  const jobSections = document.querySelectorAll(".job-section");
+  formData.append("job_count", jobSections.length);
 
-formData.append("containernr", form.containernr.value);
-formData.append("naam", form.naam.value);
-formData.append("datum", form.datum.value);
-formData.append("model", form.model.value);
-formData.append("serienr", form.serienr.value);
-formData.append("warranty_id", form.warranty_id.value);
-formData.append("garantie", form.garantie.value);
-formData.append("setpoint", form.setpoint.value);
-formData.append("vents", form.vents.value);
-formData.append("hum", form.hum.value);
-formData.append("ambient", form.ambient.value);
-formData.append("supply_voor", form.supply_voor.value);
-formData.append("supply_na", form.supply_na.value);
-formData.append("return_voor", form.return_voor.value);
-formData.append("return_na", form.return_na.value);
-formData.append("temp_in_range", form.temp_in_range.value);
-formData.append("probleem", form.probleem.value);
-formData.append("opmerkingen", form.opmerkingen.value);
+  jobSections.forEach((section, index) => {
+    const descElem = section.querySelector("[name='job_description[]']");
+    const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
+    formData.append(`job[${index}][description]`, desc);
+    formData.append(`job[${index}][code]`, section.querySelector("[name='job_code[]']").value);
+    formData.append(`job[${index}][part_number]`, section.querySelector("[name='part_number[]']").value);
+    formData.append(`job[${index}][part_description]`, section.querySelector("[name='part_description[]']").value);
+    formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
+    formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
+    formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
+    formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
+    formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
+  });
 
+  const alarmInputs = document.querySelectorAll("input[name='alarm']");
+  const alarmValues = Array.from(alarmInputs)
+    .map(input => input.value.trim())
+    .filter((val, idx, self) => val && self.indexOf(val) === idx);
+  alarmValues.forEach((value) => {
+    formData.append('alarm[]', value);
+  });
 
-    const jobSections = document.querySelectorAll(".job-section");
-    formData.append("job_count", jobSections.length);
-
-    jobSections.forEach((section, index) => {
-      const descElem = section.querySelector("[name='job_description[]']");
-const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
-
-formData.append(`job[${index}][description]`, desc);
-
-formData.append(`job[${index}][code]`, section.querySelector("[name='job_code[]']").value);
-formData.append(`job[${index}][part_number]`, section.querySelector("[name='part_number[]']").value);
-formData.append(`job[${index}][part_description]`, section.querySelector("[name='part_description[]']").value);
-formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
-formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
-formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
-formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
-formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
-
-    });
-const alarmInputs = document.querySelectorAll("input[name='alarm']");
-const alarmValues = Array.from(alarmInputs)
-  .map(input => input.value.trim())
-  .filter((val, idx, self) => val && self.indexOf(val) === idx); // Remove duplicates and empty
-
-alarmValues.forEach((value) => {
-  formData.append('alarm[]', value);  // ✅ FIX: use alarm[] to send as proper list
-});
-
-
-
+  try {
     const response = await fetch('https://rems-ssww.onrender.com/api/submit', {
       method: "POST",
       body: formData,
     });
 
     const result = await response.json();
-       if (result.status === "success") {
+    if (result.status === "success") {
       alert("✅ Report submitted successfully!");
       const techName = document.getElementById("naam").value;
       form.reset();
@@ -431,15 +422,13 @@ alarmValues.forEach((value) => {
     } else {
       alert("❌ Error submitting report: " + result.message);
     }
+  } catch (error) {
+    alert("❌ Network error: " + error.message);
   }
+}
 
-  // ✅ This must be outside and at the bottom
-  document.addEventListener("DOMContentLoaded", function () {
-    document
-      .getElementById("repairForm")
-      .addEventListener("submit", submitRepair);
-  });
-
+// Initialize form submission handler
+document.getElementById("repairForm").addEventListener("submit", submitRepair);
 </script>
 </body>
 </html>
