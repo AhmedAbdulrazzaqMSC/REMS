@@ -7,7 +7,7 @@
 <style>
     * { box-sizing: border-box; }
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
-    header { background: #003366; color: white; padding: 15px 20px; text-align: center; font-size: 20px; }
+    header { background: #003366; color: white; padding: 15px 20px; text-align: center; font-size: 20px; position: relative; }
     main { padding: 20px; max-width: 1200px; margin: auto; }
     form {
       display: grid;
@@ -27,14 +27,14 @@
     }
     textarea { resize: vertical; }
     .full-width { grid-column: 1 / -1; }
-    fieldset { border: 1px solid #ccc; padding: 10px; border-radius: 5px; }
+    fieldset { border: 1px solid #ccc; padding: 10px; border-radius: 5px; position: relative; }
     legend { font-weight: bold; }
     button.add-button {
       background-color: #003366;
       color: white;
       border: none;
       cursor: pointer;
-      margin-top: -5px;
+      margin-top: 10px;
     }
     button.add-button:hover { background-color: #0059b3; }
     @media (max-width: 768px) {
@@ -54,7 +54,94 @@
     #loginBox input { width: 100%; margin-bottom: 10px; padding: 8px; }
     #loginError { color: red; display: none; font-size: 14px; }
     .job-section { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
-  </style>
+    .remove-btn {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      background: #990000;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .remove-btn:hover {
+      background: #770000;
+    }
+    .photo-container {
+      position: relative;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .photo-remove-btn {
+      background: #990000;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .photo-remove-btn:hover {
+      background: #770000;
+    }
+    .photo-input {
+      flex-grow: 1;
+    }
+    .photo-section {
+      margin-bottom: 15px;
+    }
+    .photo-section label {
+      margin-bottom: 8px;
+      display: block;
+    }
+    .alarm-input-container {
+      position: relative;
+      margin-bottom: 10px;
+    }
+    button:disabled {
+      background-color: #cccccc !important;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    #submitButton {
+      transition: background-color 0.3s ease;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .invalid-temp {
+      border: 1px solid red;
+      background-color: #ffeeee;
+    }
+</style>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
@@ -71,28 +158,40 @@
 <label for="serienr">SERIENR.</label><input id="serienr" name="serienr" required="" type="text"/>
 <label for="warranty_id">WARRANTY ID NR</label><input id="warranty_id" name="warranty_id" required="" type="text"/>
 <label for="garantie">GARANTIE</label><input id="garantie" name="garantie" required="" type="text"/>
-<label for="setpoint">SETPOINT °C</label><input id="setpoint" name="setpoint" required="" type="text"/>
+<label for="setpoint">SETPOINT °C</label><input id="setpoint" name="setpoint" required="" type="text" oninput="validateTemperatureInput(this)"/>
 <label for="vents">VENTS</label><input id="vents" name="vents" required="" type="text"/>
 <label for="hum">HUM</label><input id="hum" name="hum" required="" type="text"/>
-<label for="ambient">AMBIENT °C</label><input id="ambient" name="ambient" required="" type="text"/>
-<label for="supply_voor">SUPPLY VOOR °C</label><input id="supply_voor" name="supply_voor" required="" type="text"/>
-<label for="supply_na">SUPPLY NA °C</label><input id="supply_na" name="supply_na" required="" type="text"/>
-<label for="return_voor">RETURN VOOR °C</label><input id="return_voor" name="return_voor" required="" type="text"/>
-<label for="return_na">RETURN NA °C</label><input id="return_na" name="return_na" required="" type="text"/>
+<label for="ambient">AMBIENT °C</label><input id="ambient" name="ambient" required="" type="text" oninput="validateTemperatureInput(this)"/>
+<label for="supply_voor">SUPPLY VOOR °C</label><input id="supply_voor" name="supply_voor" required="" type="text" oninput="validateTemperatureInput(this)"/>
+<label for="supply_na">SUPPLY NA °C</label><input id="supply_na" name="supply_na" required="" type="text" oninput="validateTemperatureInput(this)"/>
+<label for="return_voor">RETURN VOOR °C</label><input id="return_voor" name="return_voor" required="" type="text" oninput="validateTemperatureInput(this)"/>
+<label for="return_na">RETURN NA °C</label><input id="return_na" name="return_na" required="" type="text" oninput="validateTemperatureInput(this)"/>
 <label for="temp_in_range">TEMPERATUUR IN-RANGE NA REPAIR</label><input id="temp_in_range" name="temp_in_range" required="" type="text"/>
 <label class="full-width" for="probleem">OMSCHRIJVING / PROBLEEM</label><textarea class="full-width" id="probleem" name="probleem" required="" rows="3"></textarea>
 <label class="full-width" for="opmerkingen">OPMERKINGEN</label><textarea class="full-width" id="opmerkingen" name="opmerkingen" required="" rows="3"></textarea>
 <div class="full-width" id="photosSection">
 <fieldset>
 <legend>Photos</legend>
-<div id="fotos_voor">
-<label>Fotos VOOR</label><input name="fotos_voor" required="" type="file"/>
+<div class="photo-section">
+  <label>Fotos VOOR</label>
+  <div id="fotos_voor">
+    <div class="photo-container">
+      <input class="photo-input" name="fotos_voor" required type="file">
+      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+    </div>
+  </div>
+  <button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
 </div>
-<button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
-<div id="fotos_na">
-<label>Fotos NA</label><input name="fotos_na" required="" type="file"/>
+<div class="photo-section">
+  <label>Fotos NA</label>
+  <div id="fotos_na">
+    <div class="photo-container">
+      <input class="photo-input" name="fotos_na" required type="file">
+      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+    </div>
+  </div>
+  <button class="add-button" onclick="addPhoto('fotos_na')" type="button">Add More After Photos</button>
 </div>
-<button class="add-button" onclick="addPhoto('fotos_na')" type="button">Add More After Photos</button>
 </fieldset>
 </div>
 <div class="full-width" id="alarmContainer">
@@ -103,7 +202,7 @@
 <fieldset><legend>Job Tasks</legend></fieldset>
 <button class="add-button" onclick="addJob()" type="button">Add Job</button><button class="add-button" onclick="addUndefinedJob()" type="button">Add Undefined Job</button>
 </div>
-<button class="full-width" type="submit">Submit Report</button>
+<button class="full-width" type="submit" id="submitButton">Submit Report</button>
 </form>
 </main>
 
@@ -215,6 +314,34 @@ function logout() {
   location.reload();
 }
 
+function validateTemperatureInput(input) {
+  // Remove any characters that aren't numbers, minus sign, or dot
+  input.value = input.value.replace(/[^0-9\-.]/g, '');
+  
+  // Validate the format (only one minus sign at start, only one decimal point)
+  const value = input.value;
+  let isValid = true;
+  
+  // Check for multiple minus signs or minus in wrong position
+  if ((value.match(/-/g) || []).length > 1 || (value.indexOf('-') > 0)) {
+    isValid = false;
+  }
+  
+  // Check for multiple decimal points
+  if ((value.match(/\./g) || []).length > 1) {
+    isValid = false;
+  }
+  
+  // Highlight invalid inputs
+  if (!isValid || (value && !/^-?\d*\.?\d*$/.test(value))) {
+    input.classList.add('invalid-temp');
+  } else {
+    input.classList.remove('invalid-temp');
+  }
+  
+  return isValid;
+}
+
 function addJob() {
   const container = document.querySelector("#jobContainer fieldset");
   const fieldset = document.createElement("fieldset");
@@ -226,6 +353,7 @@ function addJob() {
   });
 
   fieldset.innerHTML = `
+    <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
     <label>Job Description</label>
     <select name="job_description[]" class="job-select" onchange="fillJobData(this)">
       <option value="">Select</option>
@@ -289,19 +417,42 @@ function fillJobData(selectElem) {
 
 function addPhoto(sectionId) {
   const container = document.getElementById(sectionId);
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.name = sectionId + '_extra';
-  container.appendChild(input);
+  const photoCount = container.querySelectorAll('input[type="file"]').length;
+  
+  // Limit to 2 photos per section (2 before + 2 after = 4 total)
+  if (photoCount >= 2) {
+    alert("Maximum 2 photos allowed per section (4 total)");
+    return;
+  }
+
+  const div = document.createElement('div');
+  div.className = 'photo-container';
+  
+  div.innerHTML = `
+    <input class="photo-input" type="file" name="${sectionId}_extra">
+    <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+  `;
+  container.appendChild(div);
+}
+
+function removePhoto(button) {
+  button.parentElement.remove();
 }
 
 function addAlarm() {
   const container = document.querySelector("#alarmContainer fieldset");
-  const input = document.createElement("input");
-  input.type = "text";
-  input.name = "alarm";
-  input.placeholder = "Alarm";
-  container.appendChild(input);
+  const div = document.createElement('div');
+  div.className = 'alarm-input-container';
+  
+  div.innerHTML = `
+    <input type="text" name="alarm" placeholder="Alarm">
+    <button type="button" onclick="removeAlarm(this)" class="remove-btn">×</button>
+  `;
+  container.appendChild(div);
+}
+
+function removeAlarm(button) {
+  button.parentElement.remove();
 }
 
 function addUndefinedJob() {
@@ -310,6 +461,7 @@ function addUndefinedJob() {
   fieldset.classList.add("job-section");  
 
   fieldset.innerHTML = `
+    <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
     <label>Job Description</label>
     <input type="text" name="job_description[]">
     <label>Job Code</label>
@@ -357,57 +509,102 @@ function addUndefinedJob() {
   $(fieldset).find('.job-select').select2({ width: '100%' });
 }
 
+function removeJob(button) {
+  if (document.querySelectorAll('.job-section').length <= 1) {
+    alert("You must keep at least one job section");
+    return;
+  }
+  button.closest('.job-section').remove();
+}
+
 async function submitRepair(event) {
   event.preventDefault();
-
-  const form = document.getElementById("repairForm");
-  const formData = new FormData(form);
-
-  formData.append("containernr", form.containernr.value);
-  formData.append("naam", form.naam.value);
-  formData.append("datum", form.datum.value);
-  formData.append("model", form.model.value);
-  formData.append("serienr", form.serienr.value);
-  formData.append("warranty_id", form.warranty_id.value);
-  formData.append("garantie", form.garantie.value);
-  formData.append("setpoint", form.setpoint.value);
-  formData.append("vents", form.vents.value);
-  formData.append("hum", form.hum.value);
-  formData.append("ambient", form.ambient.value);
-  formData.append("supply_voor", form.supply_voor.value);
-  formData.append("supply_na", form.supply_na.value);
-  formData.append("return_voor", form.return_voor.value);
-  formData.append("return_na", form.return_na.value);
-  formData.append("temp_in_range", form.temp_in_range.value);
-  formData.append("probleem", form.probleem.value);
-  formData.append("opmerkingen", form.opmerkingen.value);
-
-  const jobSections = document.querySelectorAll(".job-section");
-  formData.append("job_count", jobSections.length);
-
-  jobSections.forEach((section, index) => {
-    const descElem = section.querySelector("[name='job_description[]']");
-    const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
-    formData.append(`job[${index}][description]`, desc);
-    formData.append(`job[${index}][code]`, section.querySelector("[name='job_code[]']").value);
-    formData.append(`job[${index}][part_number]`, section.querySelector("[name='part_number[]']").value);
-    formData.append(`job[${index}][part_description]`, section.querySelector("[name='part_description[]']").value);
-    formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
-    formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
-    formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
-    formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
-    formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
-  });
-
-  const alarmInputs = document.querySelectorAll("input[name='alarm']");
-  const alarmValues = Array.from(alarmInputs)
-    .map(input => input.value.trim())
-    .filter((val, idx, self) => val && self.indexOf(val) === idx);
-  alarmValues.forEach((value) => {
-    formData.append('alarm[]', value);
-  });
+  
+  const submitButton = document.getElementById('submitButton');
+  
+  // Disable button and show loading state
+  submitButton.disabled = true;
+  submitButton.innerHTML = '<span class="spinner"></span> Processing...';
 
   try {
+    // Check photo limits
+    const beforePhotos = document.querySelectorAll('#fotos_voor input[type="file"]');
+    const afterPhotos = document.querySelectorAll('#fotos_na input[type="file"]');
+    
+    if (beforePhotos.length + afterPhotos.length > 4) {
+      alert("Maximum 4 photos allowed (2 before + 2 after)");
+      throw new Error("Too many photos");
+    }
+
+    // Validate temperature inputs
+    const tempInputs = [
+      document.getElementById('setpoint'),
+      document.getElementById('ambient'),
+      document.getElementById('supply_voor'),
+      document.getElementById('supply_na'),
+      document.getElementById('return_voor'),
+      document.getElementById('return_na')
+    ];
+    
+    let hasInvalidTemp = false;
+    tempInputs.forEach(input => {
+      if (!validateTemperatureInput(input)) {
+        hasInvalidTemp = true;
+      }
+    });
+    
+    if (hasInvalidTemp) {
+      alert("Please correct the invalid temperature values (only numbers, minus sign, and one decimal point allowed)");
+      throw new Error("Invalid temperature values");
+    }
+
+    const form = document.getElementById("repairForm");
+    const formData = new FormData(form);
+
+    formData.append("containernr", form.containernr.value);
+    formData.append("naam", form.naam.value);
+    formData.append("datum", form.datum.value);
+    formData.append("model", form.model.value);
+    formData.append("serienr", form.serienr.value);
+    formData.append("warranty_id", form.warranty_id.value);
+    formData.append("garantie", form.garantie.value);
+    formData.append("setpoint", form.setpoint.value);
+    formData.append("vents", form.vents.value);
+    formData.append("hum", form.hum.value);
+    formData.append("ambient", form.ambient.value);
+    formData.append("supply_voor", form.supply_voor.value);
+    formData.append("supply_na", form.supply_na.value);
+    formData.append("return_voor", form.return_voor.value);
+    formData.append("return_na", form.return_na.value);
+    formData.append("temp_in_range", form.temp_in_range.value);
+    formData.append("probleem", form.probleem.value);
+    formData.append("opmerkingen", form.opmerkingen.value);
+
+    const jobSections = document.querySelectorAll(".job-section");
+    formData.append("job_count", jobSections.length);
+
+    jobSections.forEach((section, index) => {
+      const descElem = section.querySelector("[name='job_description[]']");
+      const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
+      formData.append(`job[${index}][description]`, desc);
+      formData.append(`job[${index}][code]`, section.querySelector("[name='job_code[]']").value);
+      formData.append(`job[${index}][part_number]`, section.querySelector("[name='part_number[]']").value);
+      formData.append(`job[${index}][part_description]`, section.querySelector("[name='part_description[]']").value);
+      formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
+      formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
+      formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
+      formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
+      formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
+    });
+
+    const alarmInputs = document.querySelectorAll("input[name='alarm']");
+    const alarmValues = Array.from(alarmInputs)
+      .map(input => input.value.trim())
+      .filter((val, idx, self) => val && self.indexOf(val) === idx);
+    alarmValues.forEach((value) => {
+      formData.append('alarm[]', value);
+    });
+
     const response = await fetch('https://rems-ssww.onrender.com/api/submit', {
       method: "POST",
       body: formData,
@@ -419,16 +616,33 @@ async function submitRepair(event) {
       const techName = document.getElementById("naam").value;
       form.reset();
       document.getElementById("naam").value = techName;
+      // Reset to one job section
+      document.querySelector("#jobContainer fieldset").innerHTML = "";
+      addJob();
     } else {
       alert("❌ Error submitting report: " + result.message);
     }
   } catch (error) {
-    alert("❌ Network error: " + error.message);
+    if (error.message !== "Too many photos" && error.message !== "Invalid temperature values") {
+      alert("❌ Network error: " + error.message);
+    }
+  } finally {
+    // Re-enable button regardless of success/error
+    const submitButton = document.getElementById('submitButton');
+    submitButton.disabled = false;
+    submitButton.innerHTML = 'Submit Report';
   }
 }
 
 // Initialize form submission handler
-document.getElementById("repairForm").addEventListener("submit", submitRepair);
+document.getElementById("repairForm").addEventListener("submit", function(e) {
+  // Prevent multiple submissions if button is already disabled
+  if (document.getElementById('submitButton').disabled) {
+    e.preventDefault();
+    return;
+  }
+  submitRepair(e);
+});
 </script>
 </body>
 </html>
