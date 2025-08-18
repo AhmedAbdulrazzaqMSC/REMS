@@ -141,6 +141,17 @@
       border: 1px solid red;
       background-color: #ffeeee;
     }
+    .photo-preview {
+      max-width: 100px;
+      max-height: 100px;
+      margin-top: 5px;
+      display: none;
+    }
+    .compression-info {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
@@ -176,8 +187,10 @@
   <label>Fotos VOOR</label>
   <div id="fotos_voor">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_voor" required type="file">
+      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)">
       <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <img class="photo-preview">
+      <div class="compression-info"></div>
     </div>
   </div>
   <button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
@@ -186,8 +199,10 @@
   <label>Fotos NA</label>
   <div id="fotos_na">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_na" required type="file">
+      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)">
       <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <img class="photo-preview">
+      <div class="compression-info"></div>
     </div>
   </div>
   <button class="add-button" onclick="addPhoto('fotos_na')" type="button">Add More After Photos</button>
@@ -282,6 +297,11 @@ const credentials = {
   "Youssef Stitou": "yst123",
   "Admin": "admin123"
 };
+
+// Image compression settings
+const MAX_WIDTH = 1024;
+const MAX_HEIGHT = 1024;
+const QUALITY = 0.7;
 
 // Check login status on page load
 document.addEventListener("DOMContentLoaded", function() {
@@ -429,14 +449,94 @@ function addPhoto(sectionId) {
   div.className = 'photo-container';
   
   div.innerHTML = `
-    <input class="photo-input" type="file" name="${sectionId}_extra">
+    <input class="photo-input" type="file" name="${sectionId}_extra" accept="image/*" onchange="handleImageUpload(this)">
     <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+    <img class="photo-preview">
+    <div class="compression-info"></div>
   `;
   container.appendChild(div);
 }
 
 function removePhoto(button) {
   button.parentElement.remove();
+}
+
+function handleImageUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const container = input.closest('.photo-container');
+  const preview = container.querySelector('.photo-preview');
+  const info = container.querySelector('.compression-info');
+  
+  // Show original file info
+  info.textContent = `Original: ${formatFileSize(file.size)}`;
+  
+  // Show preview of original image
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    
+    // Compress the image
+    compressImage(file, function(compressedFile, originalSize) {
+      // Replace the file input with the compressed version
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(compressedFile);
+      input.files = dataTransfer.files;
+      
+      // Update compression info
+      info.textContent += ` → Compressed: ${formatFileSize(compressedFile.size)} (${Math.round((compressedFile.size / originalSize) * 100)}%)`;
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+function compressImage(file, callback) {
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      
+      // Calculate new dimensions while maintaining aspect ratio
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to compressed JPEG
+      canvas.toBlob(function(blob) {
+        const compressedFile = new File([blob], file.name, {
+          type: 'image/jpeg',
+          lastModified: Date.now()
+        });
+        callback(compressedFile, file.size);
+      }, 'image/jpeg', QUALITY);
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' bytes';
+  else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  else return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
 function addAlarm() {
@@ -582,6 +682,7 @@ async function submitRepair(event) {
 
     const jobSections = document.querySelectorAll(".job-section");
     formData.append("job_count", jobSections.length);
+
 
     jobSections.forEach((section, index) => {
       const descElem = section.querySelector("[name='job_description[]']");
