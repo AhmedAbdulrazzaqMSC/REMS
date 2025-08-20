@@ -260,7 +260,7 @@ def create_email_body(report, jobs, alarms):
         <h2>Repair Report for Container: {report.container_number}</h2>
         
         <div class="section">
-            <div class="section-title">Basic Information</div>
+            <div class="section-title">General Information</div>
             <table>
                 <tr><th>Container Number</th><td>{report.container_number}</td></tr>
                 <tr><th>Date</th><td>{report.report_date}</td></tr>
@@ -273,7 +273,7 @@ def create_email_body(report, jobs, alarms):
         </div>
         
         <div class="section">
-            <div class="section-title">Temperature Readings</div>
+            <div class="section-title">Settings and Readings</div>
             <table>
                 <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} °C</td></tr>
                 <tr><th>Vents</th><td>{report.vents or 'N/A'}</td></tr>
@@ -401,3 +401,4 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
