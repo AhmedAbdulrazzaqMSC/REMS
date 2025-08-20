@@ -212,7 +212,7 @@ def submit_report():
         try:
             send_email(
                 subject=container_nr,
-                body="Repair Report submitted",  # (you can keep your generate_email_content if needed)
+                body="Repair Report submitted", 
                 attachments=saved_files
             )
         except Exception as e:
@@ -273,3 +273,4 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
