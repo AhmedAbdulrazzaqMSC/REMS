@@ -220,7 +220,6 @@
 <button class="full-width" type="submit" id="submitButton">Submit Report</button>
 </form>
 </main>
-
 <div id="loginOverlay">
 <div id="loginBox">
 <h3>Login</h3>
@@ -277,28 +276,46 @@ const jobData = [
   { code: "B123A", part: "14-00353-20", description: "Piston and Motor Assembly", hours: 0.25 },
   { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
 ];
+document.addEventListener("DOMContentLoaded", function() {
+  const loggedInUser = localStorage.getItem("loggedInUser");
+  if (loggedInUser) {
+    document.getElementById('naam').value = loggedInUser;
+    document.getElementById('loginOverlay').style.display = 'none';
+    addJob(); // Initialize with one job section
+  } else {
+    document.getElementById('loginOverlay').style.display = 'flex';
+  }
+});
 
-const credentials = {
-  "Brahim Moukafih": "bm123",
-  "Christophe Jongenelen": "cj123",
-  "Gillis Keustermans": "Gillis Keustermans",
-  "Brahim Arebbat": "bar174",
-  "Ronny Joosen": "roj174",
-  "Filip Meys": "flm174",
-  "Mohamed El Faroussi": "mohfr174",
-  "Mohamed Moukafih": "mohkf174",
-  "Maksym Karalash": "mks147",
-  "Mustafa Kahraman": "mstk174",
-  "Hassan Ouchan": "ho123",
-  "Marc Eyckmans": "me123",
-  "Mohammed Ballafkih": "mb123",
-  "Yannick Standaert": "ys123",
-  "Ahmed Abdulrazzaq": "ahab174",
-  "Youssef Stitou": "yst123",
-  "Admin": "admin123"
-};
+async function validateLogin() {
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value.trim();
 
-// Image compression settings
+  try {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+
+    const result = await response.json();
+    if (result.status === "success") {
+      document.getElementById('naam').value = u;
+      document.getElementById('loginOverlay').style.display = 'none';
+      localStorage.setItem("loggedInUser", u);
+      addJob();
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+    }
+  } catch (err) {
+    alert("Login failed: " + err.message);
+  }
+}
+
+function logout() {
+  localStorage.removeItem("loggedInUser");
+  location.reload();
+}
 const MAX_WIDTH = 1024;
 const MAX_HEIGHT = 1024;
 const QUALITY = 0.7;
