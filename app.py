@@ -210,10 +210,17 @@ def submit_report():
 
         # Send Email
         try:
+            # Get jobs and alarms for this report
+            jobs = RepairJob.query.filter_by(report_id=report.id).all()
+            alarms = Alarm.query.filter_by(report_id=report.id).all()
+            
             send_email(
                 subject=container_nr,
                 body="Repair Report submitted", 
-                attachments=saved_files
+                attachments=saved_files,
+                report=report,
+                jobs=jobs,
+                alarms=alarms
             )
         except Exception as e:
             app.logger.error(f"Email failed: {str(e)}")
@@ -232,7 +239,125 @@ def submit_report():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def send_email(subject, body, attachments):
+def create_email_body(report, jobs, alarms):
+    """Create HTML email body with report details"""
+    if not report:
+        return "<p>Repair Report submitted</p>"
+    
+    html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .section {{ margin-bottom: 20px; }}
+            .section-title {{ font-weight: bold; font-size: 18px; margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h2>Repair Report for Container: {report.container_number}</h2>
+        
+        <div class="section">
+            <div class="section-title">Basic Information</div>
+            <table>
+                <tr><th>Container Number</th><td>{report.container_number}</td></tr>
+                <tr><th>Date</th><td>{report.report_date}</td></tr>
+                <tr><th>Technician</th><td>{report.technician_name}</td></tr>
+                <tr><th>Model</th><td>{report.model or 'N/A'}</td></tr>
+                <tr><th>Serial Number</th><td>{report.serial_number or 'N/A'}</td></tr>
+                <tr><th>Warranty ID</th><td>{report.warranty_id or 'N/A'}</td></tr>
+                <tr><th>Warranty Status</th><td>{report.warranty_status or 'N/A'}</td></tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Temperature Readings</div>
+            <table>
+                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} °C</td></tr>
+                <tr><th>Vents</th><td>{report.vents or 'N/A'}</td></tr>
+                <tr><th>Humidity</th><td>{report.humidity or 'N/A'}</td></tr>
+                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} °C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} °C</td></tr>
+                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} °C</td></tr>
+                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} °C</td></tr>
+                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} °C</td></tr>
+                <tr><th>Temperature In Range</th><td>{report.temp_in_range or 'N/A'}</td></tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Problem Description</div>
+            <p>{report.problem_description or 'N/A'}</p>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Comments</div>
+            <p>{report.comments or 'N/A'}</p>
+        </div>
+    """
+    
+    # Add jobs section if available
+    if jobs:
+        html += """
+        <div class="section">
+            <div class="section-title">Job Tasks</div>
+            <table>
+                <tr>
+                    <th>Job Code</th>
+                    <th>Description</th>
+                    <th>Part Number</th>
+                    <th>Part Description</th>
+                    <th>Quantity</th>
+                    <th>Damage Type</th>
+                    <th>Old Serial</th>
+                    <th>New Serial</th>
+                    <th>Labor Hours</th>
+                </tr>
+        """
+        
+        for job in jobs:
+            html += f"""
+                <tr>
+                    <td>{job.job_code or 'N/A'}</td>
+                    <td>{job.description or 'N/A'}</td>
+                    <td>{job.part_number or 'N/A'}</td>
+                    <td>{job.part_description or 'N/A'}</td>
+                    <td>{job.quantity or 'N/A'}</td>
+                    <td>{job.damage_type or 'N/A'}</td>
+                    <td>{job.old_serial or 'N/A'}</td>
+                    <td>{job.new_serial or 'N/A'}</td>
+                    <td>{job.labor_hours or 'N/A'}</td>
+                </tr>
+            """
+        
+        html += "</table></div>"
+    
+    # Add alarms section if available
+    if alarms:
+        html += """
+        <div class="section">
+            <div class="section-title">Alarms</div>
+            <ul>
+        """
+        
+        for alarm in alarms:
+            html += f"<li>{alarm.alarm_code or 'N/A'}</li>"
+        
+        html += "</ul></div>"
+    
+    html += """
+        <div class="section">
+            <p>This report was automatically generated by the REMS system.</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
+
+def send_email(subject, body, attachments, report=None, jobs=None, alarms=None):
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = os.environ.get('EMAIL_USER')
@@ -244,7 +369,10 @@ def send_email(subject, body, attachments):
     msg['From'] = EMAIL_FROM
     msg['To'] = ', '.join(EMAIL_TO)
     msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
-    msg.attach(MIMEText(body, 'html'))
+    
+    # Create HTML email body with report data
+    html_content = create_email_body(report, jobs, alarms)
+    msg.attach(MIMEText(html_content, 'html'))
 
     for filepath in attachments:
         try:
@@ -273,5 +401,3 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
