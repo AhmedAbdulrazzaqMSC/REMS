@@ -235,8 +235,8 @@ def allowed_file(filename):
 def send_email(subject, body, attachments):
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
-    SMTP_USERNAME = os.environ.get('SMTP_USER')
-    SMTP_PASSWORD = os.environ.get('SMTP_PASS')
+    SMTP_USERNAME = os.environ.get('EMAIL_USER')
+    SMTP_PASSWORD = os.environ.get('EMAIL_PASS')
     EMAIL_FROM = os.environ.get('EMAIL_FROM', SMTP_USERNAME)
     EMAIL_TO = os.environ.get("EMAIL_TO", "").split(",")
 
@@ -273,4 +273,5 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
