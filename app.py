@@ -216,12 +216,11 @@ def submit_report():
             
             send_email(
                 subject=container_nr,
-                body="Repair Report submitted",
+                body="Repair Report submitted", 
                 attachments=saved_files,
                 report=report,
                 jobs=jobs,
-                alarms=alarms,
-                afmelding=form_data.get("afmelding","")
+                alarms=alarms
             )
         except Exception as e:
             app.logger.error(f"Email failed: {str(e)}")
@@ -240,17 +239,11 @@ def submit_report():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def create_email_body(report, jobs, alarms, afmelding=''):
+def create_email_body(report, jobs, alarms):
     """Create HTML email body with report details"""
     if not report:
         return "<p>Repair Report submitted</p>"
     
-    badge = afmelding or "N/A"
-    if str(afmelding).strip().lower() == "ja":
-        badge = '<span style="background:#28a745;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold;">JA</span>'
-    elif str(afmelding).strip().lower() == "nee":
-        badge = '<span style="background:#d60000;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold;font-size:16px;">NEE</span>'
-
     html = f"""
     <html>
     <head>
@@ -291,7 +284,6 @@ def create_email_body(report, jobs, alarms, afmelding=''):
                 <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} °C</td></tr>
                 <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} °C</td></tr>
                 <tr><th>Temperature In Range</th><td>{report.temp_in_range or 'N/A'}</td></tr>
-                <tr><th>Afmelding</th><td>{badge}</td></tr>
             </table>
         </div>
         
@@ -365,7 +357,7 @@ def create_email_body(report, jobs, alarms, afmelding=''):
     
     return html
 
-def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding=''):
+def send_email(subject, body, attachments, report=None, jobs=None, alarms=None):
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = os.environ.get('EMAIL_USER')
@@ -379,7 +371,7 @@ def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, 
     msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
     
     # Create HTML email body with report data
-    html_content = create_email_body(report, jobs, alarms, afmelding)
+    html_content = create_email_body(report, jobs, alarms)
     msg.attach(MIMEText(html_content, 'html'))
 
     for filepath in attachments:
