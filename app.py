@@ -93,6 +93,33 @@ class Alarm(db.Model):
     report_id = db.Column(db.Integer, db.ForeignKey('repair_reports.id'), nullable=False)
     alarm_code = db.Column(db.String(100))
 
+class RepairListItem(db.Model):
+    __tablename__ = 'repair_list_items'
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), unique=True, nullable=False, index=True)
+    order_temp = db.Column(db.String(50))
+    position = db.Column(db.String(100))
+    alarms = db.Column(db.Text)
+    etd = db.Column(db.String(50))
+    vessel = db.Column(db.String(150))
+    requested_repair = db.Column(db.Text)
+    remarks = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "container_number": self.container_number,
+            "order_temp": self.order_temp or "",
+            "position": self.position or "",
+            "alarms": self.alarms or "",
+            "etd": self.etd or "",
+            "vessel": self.vessel or "",
+            "requested_repair": self.requested_repair or "",
+            "remarks": self.remarks or ""
+        }
+
 # Initialize DB
 with app.app_context():
     try:
@@ -137,6 +164,41 @@ def login():
     if username in valid_users and valid_users[username] == password:
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+
+# --------- REPAIR LIST ----------
+@app.route('/api/repair-list', methods=['GET'])
+def get_repair_list():
+    items = RepairListItem.query.order_by(RepairListItem.created_at.asc()).all()
+    return jsonify({"status": "success", "items": [item.to_dict() for item in items]})
+
+@app.route('/api/repair-list', methods=['POST'])
+def upsert_repair_list_item():
+    """Create/update a work item. The existing email automation can call this endpoint."""
+    data = request.get_json(silent=True) or request.form
+    container_nr = str(data.get('container_number') or data.get('containernr') or '').strip().upper()
+    if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+        return jsonify({"status": "error", "message": "Invalid container number format"}), 400
+
+    item = RepairListItem.query.filter_by(container_number=container_nr).first()
+    if item is None:
+        item = RepairListItem(container_number=container_nr)
+        db.session.add(item)
+
+    for field in ('order_temp', 'position', 'alarms', 'etd', 'vessel', 'requested_repair', 'remarks'):
+        if field in data:
+            setattr(item, field, str(data.get(field) or '').strip())
+
+    db.session.commit()
+    return jsonify({"status": "success", "item": item.to_dict()}), 200
+
+@app.route('/api/repair-list/<string:container_nr>', methods=['DELETE'])
+def delete_repair_list_item(container_nr):
+    item = RepairListItem.query.filter_by(container_number=container_nr.strip().upper()).first()
+    if item is None:
+        return jsonify({"status": "error", "message": "Container not found"}), 404
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"status": "success"})
 
 # --------- SUBMIT REPORT ----------
 @app.route('/api/submit', methods=['POST'])
@@ -226,6 +288,11 @@ def submit_report():
         except Exception as e:
             app.logger.error(f"Email failed: {str(e)}")
 
+        # A completed repair disappears from the technician work list.
+        # Incomplete reports (Afmelding = Nee) remain available for follow-up.
+        if str(form_data.get("afmelding", "")).strip().lower() == "ja":
+            RepairListItem.query.filter_by(container_number=container_nr.upper()).delete()
+
         db.session.commit()
         return jsonify({"status": "success", "message": "Report submitted successfully", "report_id": report.id})
 
@@ -284,14 +351,14 @@ def create_email_body(report, jobs, alarms, afmelding=""):
         <div class="section">
             <div class="section-title">Settings and Readings</div>
             <table>
-                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} °C</td></tr>
+                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} Â°C</td></tr>
                 <tr><th>Vents</th><td>{report.vents or 'N/A'}</td></tr>
                 <tr><th>Humidity</th><td>{report.humidity or 'N/A'}</td></tr>
-                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} °C</td></tr>
-                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} °C</td></tr>
-                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} °C</td></tr>
-                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} °C</td></tr>
-                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} °C</td></tr>
+                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} Â°C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} Â°C</td></tr>
+                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} Â°C</td></tr>
+                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} Â°C</td></tr>
+                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} Â°C</td></tr>
                 <tr><th>Temperature In Range</th><td>{report.temp_in_range or 'N/A'}</td></tr>
                 <tr><th>Afmelding</th><td>{afmelding_display}</td></tr>
             </table>
@@ -411,4 +478,3 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
