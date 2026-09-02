@@ -10,6 +10,12 @@ from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from datetime import datetime
 import logging
+import io
+import re
+import zipfile
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 from werkzeug.utils import secure_filename
 
 # ===================================
@@ -168,8 +174,16 @@ def login():
 # --------- REPAIR LIST ----------
 @app.route('/api/repair-list', methods=['GET'])
 def get_repair_list():
+    excel_share_url = os.environ.get('EXCEL_SHARE_URL', '').strip()
+    if excel_share_url:
+        try:
+            return jsonify({"status": "success", "items": read_repair_list_from_excel(excel_share_url), "source": "excel"})
+        except Exception as exc:
+            app.logger.error("Excel repair-list sync failed: %s", exc, exc_info=True)
+
+    # Keep REMS usable if OneDrive is temporarily unavailable or not configured.
     items = RepairListItem.query.order_by(RepairListItem.created_at.asc()).all()
-    return jsonify({"status": "success", "items": [item.to_dict() for item in items]})
+    return jsonify({"status": "success", "items": [item.to_dict() for item in items], "source": "database"})
 
 @app.route('/api/repair-list', methods=['POST'])
 def upsert_repair_list_item():
@@ -304,6 +318,111 @@ def submit_report():
 # ===================================
 # Helpers
 # ===================================
+def excel_column_index(cell_reference):
+    letters = re.match(r'[A-Z]+', cell_reference or '')
+    if not letters:
+        return 0
+    result = 0
+    for char in letters.group(0):
+        result = result * 26 + ord(char) - 64
+    return result - 1
+
+def excel_date_display(value):
+    try:
+        serial = float(value)
+        if serial <= 0:
+            return str(value or '')
+        date_value = datetime(1899, 12, 30) + __import__('datetime').timedelta(days=serial)
+        return date_value.strftime('%d/%m')
+    except (TypeError, ValueError, OverflowError):
+        return str(value or '').strip()
+
+def read_repair_list_from_excel(share_url):
+    """Download a view-only OneDrive workbook and read its first worksheet."""
+    parsed = urllib.parse.urlsplit(share_url)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    query['download'] = '1'
+    download_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query), parsed.fragment))
+    request_obj = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0 REMS/1.0'})
+    with urllib.request.urlopen(request_obj, timeout=20) as response:
+        workbook_bytes = response.read(20 * 1024 * 1024 + 1)
+    if len(workbook_bytes) > 20 * 1024 * 1024:
+        raise ValueError('Excel file exceeds the 20 MB safety limit')
+    if not workbook_bytes.startswith(b'PK'):
+        raise ValueError('The sharing link did not return an Excel workbook')
+
+    spreadsheet_ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    relationship_ns = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    office_rel_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+    with zipfile.ZipFile(io.BytesIO(workbook_bytes)) as archive:
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in archive.namelist():
+            shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+            for item in shared_root.findall(f'{{{spreadsheet_ns}}}si'):
+                shared_strings.append(''.join(node.text or '' for node in item.iter(f'{{{spreadsheet_ns}}}t')))
+
+        workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+        first_sheet = workbook_root.find(f'.//{{{spreadsheet_ns}}}sheet')
+        if first_sheet is None:
+            return []
+        relationship_id = first_sheet.attrib.get(f'{{{office_rel_ns}}}id')
+        rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        target = None
+        for relation in rels_root.findall(f'{{{relationship_ns}}}Relationship'):
+            if relation.attrib.get('Id') == relationship_id:
+                target = relation.attrib.get('Target')
+                break
+        if not target:
+            raise ValueError('Could not locate the Excel worksheet')
+        worksheet_path = target.lstrip('/') if target.startswith('/xl/') else 'xl/' + target.lstrip('/')
+        worksheet_path = worksheet_path.replace('xl/xl/', 'xl/')
+        sheet_root = ET.fromstring(archive.read(worksheet_path))
+
+        rows = []
+        for row in sheet_root.findall(f'.//{{{spreadsheet_ns}}}row'):
+            values = {}
+            for cell in row.findall(f'{{{spreadsheet_ns}}}c'):
+                column = excel_column_index(cell.attrib.get('r', ''))
+                cell_type = cell.attrib.get('t')
+                value_node = cell.find(f'{{{spreadsheet_ns}}}v')
+                if cell_type == 'inlineStr':
+                    inline = cell.find(f'{{{spreadsheet_ns}}}is')
+                    value = ''.join(node.text or '' for node in inline.iter(f'{{{spreadsheet_ns}}}t')) if inline is not None else ''
+                else:
+                    value = value_node.text if value_node is not None else ''
+                    if cell_type == 's' and value:
+                        value = shared_strings[int(value)]
+                values[column] = value
+            if values:
+                rows.append([values.get(i, '') for i in range(max(values) + 1)])
+
+    if not rows:
+        return []
+    headers = [str(header).strip() for header in rows[0]]
+    header_positions = {header.casefold(): index for index, header in enumerate(headers)}
+
+    def get_value(row, header):
+        index = header_positions.get(header.casefold())
+        return str(row[index]).strip() if index is not None and index < len(row) else ''
+
+    items = []
+    for row in rows[1:]:
+        container_number = get_value(row, 'Container nummer').upper()
+        if not container_number:
+            continue
+        items.append({
+            'container_number': container_number,
+            'order_temp': get_value(row, 'Order Temp'),
+            'position': get_value(row, 'Positie'),
+            'alarms': get_value(row, 'Alarm(en)'),
+            'etd': excel_date_display(get_value(row, 'Vertrek')),
+            'vessel': get_value(row, 'Vessel'),
+            'requested_repair': get_value(row, 'Gevraagd repair'),
+            'remarks': get_value(row, 'Opmerkingen')
+        })
+    return items
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
