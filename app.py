@@ -15,6 +15,7 @@ import re
 import zipfile
 import urllib.request
 import urllib.parse
+import http.cookiejar
 import xml.etree.ElementTree as ET
 from werkzeug.utils import secure_filename
 
@@ -343,8 +344,13 @@ def read_repair_list_from_excel(share_url):
     query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
     query['download'] = '1'
     download_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query), parsed.fragment))
-    request_obj = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0 REMS/1.0'})
-    with urllib.request.urlopen(request_obj, timeout=20) as response:
+    request_obj = urllib.request.Request(download_url, headers={
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream;q=0.9,*/*;q=0.8'
+    })
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    with opener.open(request_obj, timeout=20) as response:
         workbook_bytes = response.read(20 * 1024 * 1024 + 1)
     if len(workbook_bytes) > 20 * 1024 * 1024:
         raise ValueError('Excel file exceeds the 20 MB safety limit')
