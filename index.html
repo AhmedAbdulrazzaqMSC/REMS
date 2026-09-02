@@ -152,6 +152,17 @@
       color: #666;
       margin-top: 5px;
     }
+    .view-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .view-toolbar h2 { margin: 0; color: #003366; }
+    .secondary-button { width: auto; margin: 0; padding: 9px 14px; border: 1px solid #003366; border-radius: 5px; background: white; color: #003366; cursor: pointer; }
+    #repairListView { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,.1); }
+    .table-wrap { overflow-x: auto; }
+    .repair-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    .repair-table th, .repair-table td { padding: 11px 10px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+    .repair-table th { background: #003366; color: white; position: sticky; top: 0; }
+    .container-link { color: #0059b3; font-weight: bold; border: 0; padding: 0; margin: 0; width: auto; background: none; cursor: pointer; text-decoration: underline; }
+    .list-message { padding: 28px; text-align: center; color: #666; }
+    #reportView { display: none; }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
@@ -161,6 +172,27 @@
       Logout
     </button>REMS – Reefer Equipment Maintenance System</header>
 <main>
+<section id="repairListView">
+  <div class="view-toolbar">
+    <h2>Repair List</h2>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+      <button class="secondary-button" type="button" onclick="openManualReport()">New Report – Reefer Not on List</button>
+      <button class="secondary-button" type="button" onclick="loadRepairList()">Refresh</button>
+    </div>
+  </div>
+  <div id="repairListStatus" class="list-message">Loading repair list...</div>
+  <div id="repairListTableWrap" class="table-wrap" hidden>
+    <table class="repair-table">
+      <thead><tr><th>Container</th><th>Order Temp</th><th>Position</th><th>Alarm(s)</th><th>ETD</th><th>Vessel</th><th>Requested Repair</th><th>Remarks</th></tr></thead>
+      <tbody id="repairListBody"></tbody>
+    </table>
+  </div>
+</section>
+<section id="reportView">
+<div class="view-toolbar">
+  <h2>Repair Report</h2>
+  <button class="secondary-button" type="button" onclick="showRepairList()">← Back to Repair List</button>
+</div>
 <form id="repairForm">
 <label for="containernr">CONTAINERNR</label><input id="containernr" name="containernr" oninput="this.value = this.value.toUpperCase()" pattern="^[A-Z]{4}[0-9]{7}$" required="" title="Must be 4 letters followed by 7 digits (e.g., MSDU9823150)" type="text"/>
 <label for="datum">DATUM (Date)</label><input id="datum" name="datum" required="" type="date">
@@ -225,6 +257,7 @@
 </div>
 <button class="full-width" type="submit" id="submitButton">Submit Report</button>
 </form>
+</section>
 </main>
 <div id="loginOverlay">
 <div id="loginBox">
@@ -282,12 +315,77 @@ const jobData = [
   { code: "B123A", part: "14-00353-20", description: "Piston and Motor Assembly", hours: 0.25 },
   { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
 ];
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+
+async function loadRepairList() {
+  const status = document.getElementById('repairListStatus');
+  const wrap = document.getElementById('repairListTableWrap');
+  status.hidden = false;
+  status.textContent = 'Loading repair list...';
+  wrap.hidden = true;
+  try {
+    const response = await fetch('/api/repair-list');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Could not load repair list');
+    const body = document.getElementById('repairListBody');
+    body.innerHTML = result.items.map(item => `<tr>
+      <td><button type="button" class="container-link" data-container="${escapeHtml(item.container_number)}" onclick="openRepairReport(this.dataset.container)">${escapeHtml(item.container_number)}</button></td>
+      <td>${escapeHtml(item.order_temp)}</td><td>${escapeHtml(item.position)}</td><td>${escapeHtml(item.alarms)}</td>
+      <td>${escapeHtml(item.etd)}</td><td>${escapeHtml(item.vessel)}</td><td>${escapeHtml(item.requested_repair)}</td><td>${escapeHtml(item.remarks)}</td>
+    </tr>`).join('');
+    if (!result.items.length) {
+      status.textContent = 'No reefers are currently waiting for repair.';
+    } else {
+      status.hidden = true;
+      wrap.hidden = false;
+    }
+  } catch (error) {
+    status.textContent = 'Could not load the repair list: ' + error.message;
+  }
+}
+
+function prepareReport(containerNumber = '') {
+  const form = document.getElementById('repairForm');
+  const technicianName = localStorage.getItem('loggedInUser') || document.getElementById('naam').value;
+  form.reset();
+  document.getElementById('naam').value = technicianName;
+  document.getElementById('containernr').value = containerNumber;
+  document.getElementById('datum').value = new Date().toISOString().slice(0, 10);
+  document.querySelector('#jobContainer fieldset').innerHTML = '<legend>Job Tasks</legend>';
+  document.querySelector('#alarmContainer fieldset').innerHTML = '<legend>Alarms</legend>';
+  addJob();
+}
+
+function openRepairReport(containerNumber) {
+  prepareReport(containerNumber);
+  document.getElementById('repairListView').style.display = 'none';
+  document.getElementById('reportView').style.display = 'block';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function openManualReport() {
+  prepareReport('');
+  document.getElementById('repairListView').style.display = 'none';
+  document.getElementById('reportView').style.display = 'block';
+  document.getElementById('containernr').focus();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function showRepairList() {
+  document.getElementById('reportView').style.display = 'none';
+  document.getElementById('repairListView').style.display = 'block';
+  loadRepairList();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
 document.addEventListener("DOMContentLoaded", function() {
   const loggedInUser = localStorage.getItem("loggedInUser");
   if (loggedInUser) {
     document.getElementById('naam').value = loggedInUser;
     document.getElementById('loginOverlay').style.display = 'none';
     addJob(); // Initialize with one job section
+    loadRepairList();
   } else {
     document.getElementById('loginOverlay').style.display = 'flex';
   }
@@ -310,6 +408,7 @@ async function validateLogin() {
       document.getElementById('loginOverlay').style.display = 'none';
       localStorage.setItem("loggedInUser", u);
       addJob();
+      loadRepairList();
     } else {
       document.getElementById('loginError').style.display = 'block';
     }
@@ -325,24 +424,6 @@ function logout() {
 const MAX_WIDTH = 1024;
 const MAX_HEIGHT = 1024;
 const QUALITY = 0.7;
-
-// Check login status on page load
-document.addEventListener("DOMContentLoaded", function() {
-  const loggedInUser = localStorage.getItem("loggedInUser");
-  if (loggedInUser) {
-    document.getElementById('naam').value = loggedInUser;
-    document.getElementById('loginOverlay').style.display = 'none';
-    addJob(); // Initialize with one job section
-  } else {
-    document.getElementById('loginOverlay').style.display = 'flex';
-  }
-});
-
-
-function logout() {
-  localStorage.removeItem("loggedInUser");
-  location.reload();
-}
 
 function validateTemperatureInput(input) {
   // Remove any characters that aren't numbers, minus sign, or dot
@@ -716,7 +797,7 @@ async function submitRepair(event) {
       formData.append('alarm[]', value);
     });
 
-    const response = await fetch('https://rems-ssww.onrender.com/api/submit', {
+    const response = await fetch('/api/submit', {
       method: "POST",
       body: formData,
     });
@@ -730,6 +811,7 @@ async function submitRepair(event) {
       // Reset to one job section
       document.querySelector("#jobContainer fieldset").innerHTML = "";
       addJob();
+      showRepairList();
     } else {
       alert("❌ Error submitting report: " + result.message);
     }
