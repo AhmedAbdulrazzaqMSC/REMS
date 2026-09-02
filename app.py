@@ -351,14 +351,14 @@ def create_email_body(report, jobs, alarms, afmelding=""):
         <div class="section">
             <div class="section-title">Settings and Readings</div>
             <table>
-                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} Â°C</td></tr>
+                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} °C</td></tr>
                 <tr><th>Vents</th><td>{report.vents or 'N/A'}</td></tr>
                 <tr><th>Humidity</th><td>{report.humidity or 'N/A'}</td></tr>
-                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} Â°C</td></tr>
-                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} Â°C</td></tr>
-                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} Â°C</td></tr>
-                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} Â°C</td></tr>
-                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} Â°C</td></tr>
+                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} °C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} °C</td></tr>
+                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} °C</td></tr>
+                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} °C</td></tr>
+                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} °C</td></tr>
                 <tr><th>Temperature In Range</th><td>{report.temp_in_range or 'N/A'}</td></tr>
                 <tr><th>Afmelding</th><td>{afmelding_display}</td></tr>
             </table>
@@ -478,3 +478,4 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
