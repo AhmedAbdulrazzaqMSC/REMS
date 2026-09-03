@@ -161,7 +161,7 @@
     .repair-table th, .repair-table td { padding: 11px 10px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
     .repair-table th { background: #003366; color: white; position: sticky; top: 0; }
     .container-link { color: #0059b3; font-weight: bold; border: 0; padding: 0; margin: 0; width: auto; background: none; cursor: pointer; text-decoration: underline; }
-    .history-button { width: auto; margin: 0; padding: 6px 10px; border: 1px solid #0059b3; border-radius: 999px; color: #0059b3; background: #eef6ff; cursor: pointer; white-space: nowrap; }
+    .history-button { width: 28px; height: 28px; margin: 0; padding: 0; border: 1px solid #0059b3; border-radius: 50%; color: #0059b3; background: #eef6ff; cursor: pointer; font-weight: bold; line-height: 26px; text-align: center; }
     .list-message { padding: 28px; text-align: center; color: #666; }
     #reportView { display: none; }
     #historyModal { display:none; position:fixed; inset:0; z-index:9500; background:rgba(0,0,0,.62); padding:20px; overflow:auto; }
@@ -350,7 +350,7 @@ async function loadRepairList() {
     const body = document.getElementById('repairListBody');
     body.innerHTML = result.items.map(item => `<tr>
       <td><button type="button" class="container-link" data-container="${escapeHtml(item.container_number)}" onclick="openRepairReport(this.dataset.container)">${escapeHtml(item.container_number)}</button></td>
-      <td>${item.history_count ? `<button type="button" class="history-button" data-container="${escapeHtml(item.container_number)}" onclick="openHistory(this.dataset.container)">History (${Number(item.history_count)})</button>` : ''}</td>
+      <td>${item.history_count ? `<button type="button" class="history-button" data-container="${escapeHtml(item.container_number)}" onclick="openHistory(this.dataset.container)" title="View repair history" aria-label="View ${Number(item.history_count)} previous repair report${Number(item.history_count) === 1 ? '' : 's'}">${Number(item.history_count)}</button>` : ''}</td>
       <td>${escapeHtml(item.order_temp)}</td><td>${escapeHtml(item.position)}</td><td>${escapeHtml(item.alarms)}</td>
       <td>${escapeHtml(item.etd)}</td><td>${escapeHtml(item.vessel)}</td><td>${escapeHtml(item.requested_repair)}</td><td>${escapeHtml(item.remarks)}</td>
     </tr>`).join('');
