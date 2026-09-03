@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import io
 import re
@@ -178,13 +178,47 @@ def get_repair_list():
     excel_share_url = os.environ.get('EXCEL_SHARE_URL', '').strip()
     if excel_share_url:
         try:
-            return jsonify({"status": "success", "items": read_repair_list_from_excel(excel_share_url), "source": "excel"})
+            items = read_repair_list_from_excel(excel_share_url)
+            add_recent_history_counts(items)
+            return jsonify({"status": "success", "items": items, "source": "excel"})
         except Exception as exc:
             app.logger.error("Excel repair-list sync failed: %s", exc, exc_info=True)
 
     # Keep REMS usable if OneDrive is temporarily unavailable or not configured.
     items = RepairListItem.query.order_by(RepairListItem.created_at.asc()).all()
-    return jsonify({"status": "success", "items": [item.to_dict() for item in items], "source": "database"})
+    item_data = [item.to_dict() for item in items]
+    add_recent_history_counts(item_data)
+    return jsonify({"status": "success", "items": item_data, "source": "database"})
+
+@app.route('/api/report-history/<string:container_nr>', methods=['GET'])
+def get_report_history(container_nr):
+    container_nr = container_nr.strip().upper()
+    cutoff_date = (datetime.utcnow() - timedelta(days=30)).date()
+    reports = RepairReport.query.filter(
+        RepairReport.container_number == container_nr,
+        RepairReport.report_date >= cutoff_date
+    ).order_by(RepairReport.report_date.desc(), RepairReport.id.desc()).all()
+
+    history = []
+    for report in reports:
+        jobs = RepairJob.query.filter_by(report_id=report.id).order_by(RepairJob.id.asc()).all()
+        alarms = Alarm.query.filter_by(report_id=report.id).order_by(Alarm.id.asc()).all()
+        history.append({
+            "id": report.id,
+            "report_date": report.report_date.strftime('%d/%m/%Y'),
+            "technician_name": report.technician_name or "",
+            "problem_description": report.problem_description or "",
+            "comments": report.comments or "",
+            "alarms": [alarm.alarm_code for alarm in alarms if alarm.alarm_code],
+            "jobs": [{
+                "job_code": job.job_code or "",
+                "description": job.description or "",
+                "part_number": job.part_number or "",
+                "part_description": job.part_description or "",
+                "quantity": job.quantity or 0
+            } for job in jobs]
+        })
+    return jsonify({"status": "success", "container_number": container_nr, "history": history})
 
 @app.route('/api/repair-list', methods=['POST'])
 def upsert_repair_list_item():
@@ -319,6 +353,23 @@ def submit_report():
 # ===================================
 # Helpers
 # ===================================
+def add_recent_history_counts(items):
+    container_numbers = {str(item.get('container_number', '')).strip().upper() for item in items}
+    container_numbers.discard('')
+    if not container_numbers:
+        return
+    cutoff_date = (datetime.utcnow() - timedelta(days=30)).date()
+    reports = RepairReport.query.with_entities(RepairReport.container_number).filter(
+        RepairReport.container_number.in_(container_numbers),
+        RepairReport.report_date >= cutoff_date
+    ).all()
+    counts = {}
+    for (container_number,) in reports:
+        key = (container_number or '').upper()
+        counts[key] = counts.get(key, 0) + 1
+    for item in items:
+        item['history_count'] = counts.get(str(item.get('container_number', '')).upper(), 0)
+
 def excel_column_index(cell_reference):
     letters = re.match(r'[A-Z]+', cell_reference or '')
     if not letters:
