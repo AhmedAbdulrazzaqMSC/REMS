@@ -312,12 +312,17 @@ def submit_report():
 
         # Files
         saved_files = []
-        for file_key, file in files.items():
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                saved_files.append(filepath)
+        file_counter = 0
+        for file_key in files.keys():
+            for file in files.getlist(file_key):
+                if file and allowed_file(file.filename):
+                    original_name = secure_filename(file.filename)
+                    name, extension = os.path.splitext(original_name)
+                    filename = f"report_{report.id}_{file_counter}_{name}{extension}"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    saved_files.append(filepath)
+                    file_counter += 1
 
         # Send Email
         try:
