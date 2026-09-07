@@ -16,6 +16,7 @@ import zipfile
 import urllib.request
 import urllib.parse
 import http.cookiejar
+import html
 import xml.etree.ElementTree as ET
 from werkzeug.utils import secure_filename
 
@@ -126,6 +127,14 @@ class RepairListItem(db.Model):
             "requested_repair": self.requested_repair or "",
             "remarks": self.remarks or ""
         }
+
+class RepairZoneRequest(db.Model):
+    __tablename__ = 'repair_zone_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), nullable=False, index=True)
+    technician_name = db.Column(db.String(100), nullable=False)
+    current_position = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 # Initialize DB
 with app.app_context():
@@ -248,6 +257,51 @@ def delete_repair_list_item(container_nr):
     db.session.delete(item)
     db.session.commit()
     return jsonify({"status": "success"})
+
+@app.route('/api/request-repair-zone', methods=['POST'])
+def request_repair_zone():
+    data = request.get_json(silent=True) or {}
+    container_nr = str(data.get('container_number') or '').strip().upper()
+    technician_name = str(data.get('technician_name') or '').strip()
+    current_position = str(data.get('current_position') or '').strip()
+
+    if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+        return jsonify({"status": "error", "message": "Invalid container number format"}), 400
+    if not technician_name:
+        return jsonify({"status": "error", "message": "Technician name is required"}), 400
+    if not current_position:
+        return jsonify({"status": "error", "message": "Current position is required"}), 400
+
+    duplicate_since = datetime.utcnow() - timedelta(minutes=15)
+    duplicate = RepairZoneRequest.query.filter(
+        RepairZoneRequest.container_number == container_nr,
+        RepairZoneRequest.created_at >= duplicate_since
+    ).first()
+    if duplicate:
+        return jsonify({
+            "status": "error",
+            "message": "A repair-zone request for this reefer was already sent in the last 15 minutes"
+        }), 409
+
+    request_record = RepairZoneRequest(
+        container_number=container_nr,
+        technician_name=technician_name,
+        current_position=current_position
+    )
+    db.session.add(request_record)
+
+    try:
+        send_repair_zone_email(container_nr, technician_name, current_position)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.error("Repair-zone email failed: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "message": "The request email could not be sent"}), 502
+
+    return jsonify({
+        "status": "success",
+        "message": f"Repair-zone request sent for {container_nr}"
+    })
 
 # --------- SUBMIT REPORT ----------
 @app.route('/api/submit', methods=['POST'])
@@ -651,6 +705,49 @@ def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, 
         smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
         app.logger.info(f"Email sent to: {EMAIL_TO}")
+
+def send_repair_zone_email(container_number, technician_name, current_position):
+    smtp_server = 'smtp.gmail.com'
+    smtp_port = 587
+    smtp_username = os.environ.get('EMAIL_USER')
+    smtp_password = os.environ.get('EMAIL_PASS')
+    email_from = os.environ.get('EMAIL_FROM', smtp_username)
+    recipient_setting = os.environ.get('REPAIR_ZONE_EMAIL_TO') or os.environ.get('EMAIL_TO', '')
+    email_to = [address.strip() for address in recipient_setting.split(',') if address.strip()]
+
+    if not smtp_username or not smtp_password:
+        raise RuntimeError('Gmail credentials are not configured')
+    if not email_to:
+        raise RuntimeError('REPAIR_ZONE_EMAIL_TO is not configured')
+
+    safe_container = html.escape(container_number)
+    safe_technician = html.escape(technician_name)
+    safe_position = html.escape(current_position)
+    requested_at = datetime.utcnow().strftime('%d-%m-%Y %H:%M UTC')
+
+    message = MIMEMultipart('alternative')
+    message['From'] = email_from
+    message['To'] = ', '.join(email_to)
+    message['Subject'] = f"REMS Repair Zone Request - {container_number}"
+    message.attach(MIMEText(f"""
+    <html><body style="font-family:Arial,sans-serif;color:#222;">
+      <h2 style="color:#003366;">Reefer Repair Zone Request</h2>
+      <table style="border-collapse:collapse;">
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Container</strong></td><td>{safe_container}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Current position</strong></td><td>{safe_position}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Requested by</strong></td><td>{safe_technician}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Date/time</strong></td><td>{requested_at}</td></tr>
+      </table>
+      <p>Please bring this reefer to the repair zone.</p>
+      <p style="color:#666;font-size:12px;">This request was automatically generated by REMS.</p>
+    </body></html>
+    """, 'html'))
+
+    with smtplib.SMTP(smtp_server, smtp_port) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_username, smtp_password)
+        smtp.sendmail(email_from, email_to, message.as_string())
+        app.logger.info("Repair-zone request sent for %s to %s", container_number, email_to)
 
 # ===================================
 # Run App
