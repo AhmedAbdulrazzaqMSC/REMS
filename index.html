@@ -175,6 +175,17 @@
     .history-card h4 { margin:13px 0 6px; color:#333; }
     .history-card p { margin:0; white-space:pre-wrap; }
     .history-jobs { margin:0; padding-left:20px; }
+    #containerActionModal, #repairZoneModal { display:none; position:fixed; inset:0; z-index:9600; background:rgba(0,0,0,.62); padding:20px; overflow:auto; }
+    .action-dialog { max-width:460px; margin:90px auto; background:white; border-radius:10px; box-shadow:0 18px 60px rgba(0,0,0,.35); overflow:hidden; }
+    .action-body { padding:22px; }
+    .action-body p { margin:0 0 16px; }
+    .action-buttons { display:grid; gap:10px; }
+    .action-button { width:100%; margin:0; padding:12px 14px; border-radius:6px; cursor:pointer; font-weight:bold; }
+    .report-action { border:1px solid #003366; background:#003366; color:white; }
+    .zone-action { border:1px solid #b56700; background:#fff4e5; color:#8a4e00; }
+    .cancel-action { border:1px solid #aaa; background:white; color:#444; }
+    #repairZonePosition { width:100%; box-sizing:border-box; margin:6px 0 18px; padding:10px; border:1px solid #aaa; border-radius:5px; font-size:16px; text-transform:uppercase; }
+    #repairZoneError { display:none; margin:0 0 14px; color:#b00020; }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
@@ -277,6 +288,34 @@
     <div id="historyContent">Loading history...</div>
   </div>
 </div>
+<div id="containerActionModal" onclick="if(event.target === this) closeContainerActions()">
+  <div class="action-dialog" role="dialog" aria-modal="true" aria-labelledby="containerActionTitle">
+    <div class="history-header"><h2 id="containerActionTitle">Choose Action</h2><button type="button" class="history-close" onclick="closeContainerActions()" aria-label="Close">×</button></div>
+    <div class="action-body">
+      <p id="containerActionText"></p>
+      <div class="action-buttons">
+        <button type="button" class="action-button report-action" onclick="continueToReport()">Create New Report</button>
+        <button type="button" class="action-button zone-action" onclick="openRepairZoneForm()">Request Repair Zone</button>
+        <button type="button" class="action-button cancel-action" onclick="closeContainerActions()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="repairZoneModal" onclick="if(event.target === this) closeRepairZoneForm()">
+  <div class="action-dialog" role="dialog" aria-modal="true" aria-labelledby="repairZoneTitle">
+    <div class="history-header"><h2 id="repairZoneTitle">Request Repair Zone</h2><button type="button" class="history-close" onclick="closeRepairZoneForm()" aria-label="Close">×</button></div>
+    <form class="action-body" onsubmit="submitRepairZoneRequest(event)">
+      <p id="repairZoneContainer"></p>
+      <label for="repairZonePosition"><strong>Current Position</strong></label>
+      <input id="repairZonePosition" autocomplete="off" required placeholder="Example: 2556/O" />
+      <p id="repairZoneError"></p>
+      <div class="action-buttons">
+        <button id="repairZoneSubmit" type="submit" class="action-button zone-action">Send Request</button>
+        <button type="button" class="action-button cancel-action" onclick="closeRepairZoneForm()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 <div id="loginOverlay">
 <div id="loginBox">
 <h3>Login</h3>
@@ -333,6 +372,7 @@ const jobData = [
   { code: "B123A", part: "14-00353-20", description: "Piston and Motor Assembly", hours: 0.25 },
   { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
 ];
+let selectedContainerNumber = '';
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 }
@@ -349,7 +389,7 @@ async function loadRepairList() {
     if (!response.ok) throw new Error(result.message || 'Could not load repair list');
     const body = document.getElementById('repairListBody');
     body.innerHTML = result.items.map(item => `<tr>
-      <td><button type="button" class="container-link" data-container="${escapeHtml(item.container_number)}" onclick="openRepairReport(this.dataset.container)">${escapeHtml(item.container_number)}</button></td>
+      <td><button type="button" class="container-link" data-container="${escapeHtml(item.container_number)}" onclick="openContainerActions(this.dataset.container)">${escapeHtml(item.container_number)}</button></td>
       <td>${item.history_count ? `<button type="button" class="history-button" data-container="${escapeHtml(item.container_number)}" onclick="openHistory(this.dataset.container)" title="View repair history" aria-label="View ${Number(item.history_count)} previous repair report${Number(item.history_count) === 1 ? '' : 's'}">${Number(item.history_count)}</button>` : ''}</td>
       <td>${escapeHtml(item.order_temp)}</td><td>${escapeHtml(item.position)}</td><td>${escapeHtml(item.alarms)}</td>
       <td>${escapeHtml(item.etd)}</td><td>${escapeHtml(item.vessel)}</td><td>${escapeHtml(item.requested_repair)}</td><td>${escapeHtml(item.remarks)}</td>
@@ -399,8 +439,74 @@ function closeHistory() {
 }
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeHistory();
+  if (event.key === 'Escape') {
+    closeHistory();
+    closeContainerActions();
+    closeRepairZoneForm();
+  }
 });
+
+function openContainerActions(containerNumber) {
+  selectedContainerNumber = containerNumber;
+  document.getElementById('containerActionText').textContent = `What do you want to do with ${containerNumber}?`;
+  document.getElementById('containerActionModal').style.display = 'block';
+}
+
+function closeContainerActions() {
+  document.getElementById('containerActionModal').style.display = 'none';
+}
+
+function continueToReport() {
+  const containerNumber = selectedContainerNumber;
+  closeContainerActions();
+  openRepairReport(containerNumber);
+}
+
+function openRepairZoneForm() {
+  closeContainerActions();
+  document.getElementById('repairZoneContainer').innerHTML = `<strong>Container:</strong> ${escapeHtml(selectedContainerNumber)}`;
+  document.getElementById('repairZonePosition').value = '';
+  document.getElementById('repairZoneError').style.display = 'none';
+  document.getElementById('repairZoneModal').style.display = 'block';
+  setTimeout(() => document.getElementById('repairZonePosition').focus(), 0);
+}
+
+function closeRepairZoneForm() {
+  document.getElementById('repairZoneModal').style.display = 'none';
+}
+
+async function submitRepairZoneRequest(event) {
+  event.preventDefault();
+  const position = document.getElementById('repairZonePosition').value.trim().toUpperCase();
+  const technicianName = localStorage.getItem('loggedInUser') || document.getElementById('naam').value;
+  const submitButton = document.getElementById('repairZoneSubmit');
+  const errorText = document.getElementById('repairZoneError');
+  errorText.style.display = 'none';
+  submitButton.disabled = true;
+  submitButton.textContent = 'Sending...';
+
+  try {
+    const response = await fetch('/api/request-repair-zone', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        container_number: selectedContainerNumber,
+        technician_name: technicianName,
+        current_position: position
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Could not send the request');
+    closeRepairZoneForm();
+    alert(`✅ Repair-zone request sent for ${selectedContainerNumber}`);
+  } catch (error) {
+    errorText.textContent = error.message;
+    errorText.style.display = 'block';
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Send Request';
+  }
+}
 
 function prepareReport(containerNumber = '') {
   const form = document.getElementById('repairForm');
