@@ -700,7 +700,8 @@ function updateSerialRequirements(fieldset) {
       /(evaporator|condenser)/.test(partDescription) &&
       /(fan|motor)/.test(partDescription)
     ) ||
-    /(condenser.*coil|coil.*condenser)/.test(partDescription);
+    /(condenser.*coil|coil.*condenser)/.test(partDescription) ||
+    /\bcompressor\b/.test(partDescription);
 
   const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
   const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
@@ -1041,7 +1042,12 @@ function compressImage(file, callback) {
       
       // Convert to compressed JPEG
       canvas.toBlob(function(blob) {
-        const compressedFile = new File([blob], file.name, {
+        if (!blob) {
+          callback(file, file.size);
+          return;
+        }
+        const originalBaseName = (file.name || 'photo').replace(/\.[^.]+$/, '');
+        const compressedFile = new File([blob], `${originalBaseName}.jpg`, {
           type: 'image/jpeg',
           lastModified: Date.now()
         });
@@ -1051,6 +1057,14 @@ function compressImage(file, callback) {
     img.src = event.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+function compressImagePromise(file) {
+  return new Promise((resolve) => {
+    compressImage(file, (compressedFile, originalSize) => {
+      resolve({ compressedFile, originalSize });
+    });
+  });
 }
 
 function formatFileSize(bytes) {
@@ -1161,6 +1175,41 @@ async function submitRepair(event) {
     const form = document.getElementById("repairForm");
     const formData = new FormData(form);
 
+    // Remove the original full-resolution photo files that FormData(form)
+    // added automatically. We append compressed versions below instead.
+    const photoKeys = [];
+    for (const [key] of formData.entries()) {
+      if (key.startsWith('fotos_voor') || key.startsWith('fotos_na')) {
+        if (!photoKeys.includes(key)) photoKeys.push(key);
+      }
+    }
+    photoKeys.forEach(key => formData.delete(key));
+
+    const beforeFiles = beforeInputs.flatMap(input => Array.from(input.files || []));
+    const afterFiles = afterInputs.flatMap(input => Array.from(input.files || []));
+    const totalPhotos = beforeFiles.length + afterFiles.length;
+    let processedPhotos = 0;
+
+    async function compressAndAppend(filesToProcess, formKey) {
+      for (const file of filesToProcess) {
+        processedPhotos += 1;
+        submitButton.innerHTML =
+          `<span class="spinner"></span> Compressing photos ${processedPhotos}/${totalPhotos}...`;
+
+        const { compressedFile, originalSize } = await compressImagePromise(file);
+        formData.append(formKey, compressedFile, compressedFile.name);
+
+        console.log(
+          `Compressed ${file.name}: ${formatFileSize(originalSize)} → ${formatFileSize(compressedFile.size)}`
+        );
+      }
+    }
+
+    await compressAndAppend(beforeFiles, 'fotos_voor');
+    await compressAndAppend(afterFiles, 'fotos_na');
+
+    submitButton.innerHTML = '<span class="spinner"></span> Uploading report...';
+
     formData.append("containernr", form.containernr.value);
     formData.append("naam", form.naam.value);
     formData.append("datum", form.datum.value);
@@ -1207,6 +1256,8 @@ async function submitRepair(event) {
     alarmValues.forEach((value) => {
       formData.append('alarm[]', value);
     });
+
+    submitButton.innerHTML = '<span class="spinner"></span> Sending report...';
 
     const response = await fetch('/api/submit', {
       method: "POST",
