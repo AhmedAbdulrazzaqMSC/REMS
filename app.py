@@ -898,7 +898,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
 def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
-    """Create a clean, mobile-friendly REMS repair-report email."""
+    """Create the original REMS email layout with the updated Job Tasks section."""
     if not report:
         return "<p>Repair Report submitted</p>"
 
@@ -907,11 +907,8 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
             return fallback
         return html.escape(str(value))
 
-    def temp(value):
-        return f"{safe(value)} °C" if value is not None and value != "" else "N/A"
-
     def qty(value):
-        if value is None:
+        if value is None or value == "":
             return "N/A"
         try:
             number = float(value)
@@ -921,137 +918,150 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
 
     afmelding_value = (afmelding or "").strip()
     if afmelding_value.lower() == "nee":
-        afmelding_display = '<span style="color:#c62828;font-weight:700;">NEE</span>'
+        afmelding_display = '<span style="color:#d60000;font-weight:bold;font-size:16px;">NEE</span>'
     elif afmelding_value.lower() == "ja":
-        afmelding_display = '<span style="color:#168a2e;font-weight:700;">JA</span>'
+        afmelding_display = '<span style="color:#168a2e;font-weight:bold;">JA</span>'
     else:
         afmelding_display = "N/A"
 
-    total_labor = round(sum(float(job.labor_hours or 0) for job in (jobs or [])), 2)
-    photo_counts = photo_counts or {}
-    before_count = int(photo_counts.get("before", 0) or 0)
-    after_count = int(photo_counts.get("after", 0) or 0)
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .section {{ margin-bottom: 20px; }}
+            .section-title {{ font-weight: bold; font-size: 18px; margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h2>Repair Report for Container: {safe(report.container_number)}</h2>
 
-    # Build job rows. E001II shows Bottle nr instead of an irrelevant part/SN combination.
-    job_rows = ""
-    for job in jobs or []:
-        code = (job.job_code or "").strip().upper()
-        if code == "E001II":
-            used_item = f"<strong>Bottle nr:</strong> {safe(job.bottle_number)}"
-            serials = "—"
-        else:
-            part_bits = [safe(job.part_number, "")]
-            if job.part_description:
-                part_bits.append(safe(job.part_description, ""))
-            used_item = " — ".join(bit for bit in part_bits if bit) or "N/A"
-            old_sn = safe(job.old_serial, "—")
-            new_sn = safe(job.new_serial, "—")
-            serials = f"<strong>Old:</strong> {old_sn}<br><strong>New:</strong> {new_sn}"
+        <div class="section">
+            <div class="section-title">General Information</div>
+            <table>
+                <tr><th>Container Number</th><td>{safe(report.container_number)}</td></tr>
+                <tr><th>Date</th><td>{safe(report.report_date)}</td></tr>
+                <tr><th>Technician</th><td>{safe(report.technician_name)}</td></tr>
+                <tr><th>Model</th><td>{safe(report.model)}</td></tr>
+                <tr><th>Serial Number</th><td>{safe(report.serial_number)}</td></tr>
+                <tr><th>Warranty ID</th><td>{safe(report.warranty_id)}</td></tr>
+                <tr><th>Warranty Status</th><td>{safe(report.warranty_status)}</td></tr>
+            </table>
+        </div>
 
-        job_rows += f"""
-          <tr>
-            <td style="padding:10px;border:1px solid #d9e0e7;vertical-align:top;">
-              <strong>{safe(job.job_code)}</strong><br>
-              <span style="color:#555;">{safe(job.description)}</span>
-            </td>
-            <td style="padding:10px;border:1px solid #d9e0e7;vertical-align:top;">{used_item}</td>
-            <td style="padding:10px;border:1px solid #d9e0e7;text-align:center;vertical-align:top;">{qty(job.quantity)}</td>
-            <td style="padding:10px;border:1px solid #d9e0e7;vertical-align:top;">{serials}</td>
-            <td style="padding:10px;border:1px solid #d9e0e7;text-align:center;vertical-align:top;"><strong>{qty(job.labor_hours)} h</strong></td>
-          </tr>
+        <div class="section">
+            <div class="section-title">Settings and Readings</div>
+            <table>
+                <tr><th>Setpoint</th><td>{safe(report.setpoint)} °C</td></tr>
+                <tr><th>Vents</th><td>{safe(report.vents)}</td></tr>
+                <tr><th>Humidity</th><td>{safe(report.humidity)}</td></tr>
+                <tr><th>Ambient</th><td>{safe(report.ambient_temp)} °C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{safe(report.supply_temp_before)} °C</td></tr>
+                <tr><th>Supply Temp After</th><td>{safe(report.supply_temp_after)} °C</td></tr>
+                <tr><th>Return Temp Before</th><td>{safe(report.return_temp_before)} °C</td></tr>
+                <tr><th>Return Temp After</th><td>{safe(report.return_temp_after)} °C</td></tr>
+                <tr><th>Temperature In Range</th><td>{safe(report.temp_in_range)}</td></tr>
+                <tr><th>Afmelding</th><td>{afmelding_display}</td></tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Problem Description</div>
+            <p>{safe(report.problem_description)}</p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Comments</div>
+            <p>{safe(report.comments)}</p>
+        </div>
+    """
+
+    # Updated Job Tasks section only.
+    if jobs:
+        html_body += """
+        <div class="section">
+            <div class="section-title">Job Tasks</div>
+            <table>
+                <tr>
+                    <th>Job Code</th>
+                    <th>Description</th>
+                    <th>Used Part / Bottle</th>
+                    <th>Quantity</th>
+                    <th>Old Serial</th>
+                    <th>New Serial</th>
+                    <th>Labor Hours</th>
+                </tr>
         """
 
-    alarm_html = "N/A"
-    if alarms:
-        alarm_html = "<br>".join(safe(a.alarm_code) for a in alarms if a.alarm_code) or "N/A"
+        total_labor = 0.0
 
-    return f"""
-    <!doctype html>
-    <html>
-    <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#20252b;">
-      <div style="max-width:900px;margin:0 auto;padding:20px 12px;">
-        <div style="background:#073f70;color:#fff;padding:20px 24px;border-radius:10px 10px 0 0;">
-          <div style="font-size:12px;letter-spacing:1.4px;font-weight:700;opacity:.85;">REMS</div>
-          <div style="font-size:24px;font-weight:700;margin-top:4px;">Repair Report</div>
-          <div style="font-size:18px;margin-top:6px;">{safe(report.container_number)}</div>
-        </div>
+        for job in jobs:
+            code = (job.job_code or "").strip().upper()
 
-        <div style="background:#fff;padding:22px 24px;border:1px solid #dde3e8;border-top:0;">
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:10px;">General Information</div>
-          <table role="presentation" style="width:100%;border-collapse:collapse;margin-bottom:22px;">
-            <tr><td style="padding:7px 12px 7px 0;color:#666;width:180px;">Date</td><td style="padding:7px 0;font-weight:600;">{safe(report.report_date)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Technician</td><td style="padding:7px 0;font-weight:600;">{safe(report.technician_name)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Model NR</td><td style="padding:7px 0;font-weight:600;">{safe(report.model)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Model Family</td><td style="padding:7px 0;font-weight:600;">{safe(report.model_family)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Serial Number</td><td style="padding:7px 0;font-weight:600;">{safe(report.serial_number)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Warranty ID</td><td style="padding:7px 0;font-weight:600;">{safe(report.warranty_id)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Warranty Status</td><td style="padding:7px 0;font-weight:600;">{safe(report.warranty_status)}</td></tr>
-            <tr><td style="padding:7px 12px 7px 0;color:#666;">Afmelding</td><td style="padding:7px 0;">{afmelding_display}</td></tr>
-          </table>
+            try:
+                total_labor += float(job.labor_hours or 0)
+            except (TypeError, ValueError):
+                pass
 
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:10px;">Settings &amp; Readings</div>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:22px;">
-            <tr>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">Setpoint</th>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">Ambient</th>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">Vents</th>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">Humidity</th>
-            </tr>
-            <tr>
-              <td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.setpoint)}</td>
-              <td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.ambient_temp)}</td>
-              <td style="padding:8px;border:1px solid #d9e0e7;">{safe(report.vents)}</td>
-              <td style="padding:8px;border:1px solid #d9e0e7;">{safe(report.humidity)}</td>
-            </tr>
-          </table>
+            if code == "E001II":
+                used_part = f"Bottle nr: {safe(job.bottle_number)}"
+                old_serial = "—"
+                new_serial = "—"
+            else:
+                part_number = safe(job.part_number, "")
+                part_description = safe(job.part_description, "")
+                if part_number and part_description:
+                    used_part = f"{part_number}<br>{part_description}"
+                else:
+                    used_part = part_number or part_description or "N/A"
+                old_serial = safe(job.old_serial, "—")
+                new_serial = safe(job.new_serial, "—")
 
-          <table style="width:100%;border-collapse:collapse;margin-bottom:22px;">
-            <tr>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;"></th>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">Before</th>
-              <th style="background:#eef3f7;padding:8px;border:1px solid #d9e0e7;text-align:left;">After</th>
-            </tr>
-            <tr><th style="padding:8px;border:1px solid #d9e0e7;text-align:left;">Supply</th><td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.supply_temp_before)}</td><td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.supply_temp_after)}</td></tr>
-            <tr><th style="padding:8px;border:1px solid #d9e0e7;text-align:left;">Return</th><td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.return_temp_before)}</td><td style="padding:8px;border:1px solid #d9e0e7;">{temp(report.return_temp_after)}</td></tr>
-            <tr><th style="padding:8px;border:1px solid #d9e0e7;text-align:left;">Temperature in range</th><td colspan="2" style="padding:8px;border:1px solid #d9e0e7;">{safe(report.temp_in_range)}</td></tr>
-          </table>
+            html_body += f"""
+                <tr>
+                    <td>{safe(job.job_code)}</td>
+                    <td>{safe(job.description)}</td>
+                    <td>{used_part}</td>
+                    <td>{qty(job.quantity)}</td>
+                    <td>{old_serial}</td>
+                    <td>{new_serial}</td>
+                    <td>{qty(job.labor_hours)}</td>
+                </tr>
+            """
 
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:8px;">Problem / Comments</div>
-          <div style="background:#f7f9fb;border-left:4px solid #073f70;padding:12px 14px;margin-bottom:8px;"><strong>Problem:</strong> {safe(report.problem_description)}</div>
-          <div style="background:#f7f9fb;border-left:4px solid #aab7c4;padding:12px 14px;margin-bottom:22px;"><strong>Comments:</strong> {safe(report.comments)}</div>
-
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:8px;">Alarms</div>
-          <div style="margin-bottom:22px;">{alarm_html}</div>
-
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:10px;">Repairs Performed</div>
-          <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:13px;">
-              <tr>
-                <th style="background:#073f70;color:#fff;padding:9px;border:1px solid #073f70;text-align:left;">Job</th>
-                <th style="background:#073f70;color:#fff;padding:9px;border:1px solid #073f70;text-align:left;">Used Part / Bottle</th>
-                <th style="background:#073f70;color:#fff;padding:9px;border:1px solid #073f70;">Qty</th>
-                <th style="background:#073f70;color:#fff;padding:9px;border:1px solid #073f70;text-align:left;">Serial Numbers</th>
-                <th style="background:#073f70;color:#fff;padding:9px;border:1px solid #073f70;">Labor</th>
-              </tr>
-              {job_rows if job_rows else '<tr><td colspan="5" style="padding:10px;border:1px solid #d9e0e7;">No job tasks entered.</td></tr>'}
+        html_body += f"""
+                <tr>
+                    <td colspan="6" style="text-align:right;font-weight:bold;">Total Labor</td>
+                    <td style="font-weight:bold;">{qty(round(total_labor, 2))}</td>
+                </tr>
             </table>
-          </div>
-          <div style="text-align:right;font-size:16px;font-weight:700;margin-bottom:22px;">Total Labor: {qty(total_labor)} h</div>
-
-          <div style="font-size:17px;font-weight:700;color:#073f70;margin-bottom:8px;">Photos</div>
-          <div style="margin-bottom:22px;">
-            <strong>Before:</strong> {before_count} photo{"s" if before_count != 1 else ""} attached<br>
-            <strong>After:</strong> {after_count} photo{"s" if after_count != 1 else ""} attached
-          </div>
-
-          <div style="border-top:1px solid #e3e7eb;padding-top:14px;color:#777;font-size:12px;">
-            This report was automatically generated by the REMS system.
-          </div>
         </div>
-      </div>
+        """
+
+    if alarms:
+        html_body += """
+        <div class="section">
+            <div class="section-title">Alarms</div>
+            <ul>
+        """
+
+        for alarm in alarms:
+            html_body += f"<li>{safe(alarm.alarm_code)}</li>"
+
+        html_body += "</ul></div>"
+
+    html_body += """
+        <div class="section">
+            <p>This report was automatically generated by the REMS system.</p>
+        </div>
     </body>
     </html>
     """
+
+    return html_body
 
 
 def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding="", photo_counts=None):
