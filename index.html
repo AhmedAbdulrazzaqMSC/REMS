@@ -621,6 +621,7 @@ function addJob() {
     <input type="hidden" name="job_code[]">
     <input type="hidden" name="repair_type[]">
 
+    <div class="standard-job-fields">
     <label>Used Part</label>
     <div class="autocomplete-wrap">
       <input type="text" class="autocomplete-input part-autocomplete"
@@ -630,14 +631,22 @@ function addJob() {
     <input type="hidden" name="part_number[]">
     <input type="hidden" name="part_description[]">
 
+    </div>
     <label>Quantity <span class="quantity-note" style="font-weight:normal;color:#666"></span></label>
     <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
 
+    <div class="standard-job-details">
     <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_old[]">
 
     <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_new[]">
+
+    </div>
+    <div class="refrigerant-bottle-field" style="display:none">
+      <label>Bottle nr</label>
+      <input type="text" name="bottle_number[]" autocomplete="off">
+    </div>
 
     <label>Labor Hours</label>
     <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
@@ -652,6 +661,36 @@ function addJob() {
   initializeAutocomplete(fieldset);
 }
 
+function applySpecialJobLayout(fieldset) {
+  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
+  const isRefrigerant = jobCode === 'E001II';
+
+  const standardPart = fieldset.querySelector('.standard-job-fields');
+  const standardDetails = fieldset.querySelector('.standard-job-details');
+  const bottleField = fieldset.querySelector('.refrigerant-bottle-field');
+  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+  const laborNote = fieldset.querySelector('.labor-note');
+
+  if (standardPart) standardPart.style.display = isRefrigerant ? 'none' : '';
+  if (standardDetails) standardDetails.style.display = isRefrigerant ? 'none' : '';
+  if (bottleField) bottleField.style.display = isRefrigerant ? '' : 'none';
+
+  if (isRefrigerant) {
+    // Refrigerant R134A Charge: only Quantity, Bottle nr and fixed Labor Hours.
+    fieldset.querySelector('input[name="part_number[]"]').value = '';
+    fieldset.querySelector('input[name="part_description[]"]').value = '';
+    fieldset.querySelector('input[name="serial_old[]"]').value = '';
+    fieldset.querySelector('input[name="serial_new[]"]').value = '';
+    laborInput.value = '0.5';
+    laborInput.readOnly = true;
+    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
+  } else {
+    laborInput.readOnly = false;
+    const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
+    if (bottle) bottle.value = '';
+  }
+}
+
 function initializeAutocomplete(fieldset) {
   setupAutocomplete(
     fieldset,
@@ -661,12 +700,14 @@ function initializeAutocomplete(fieldset) {
       fieldset.querySelector('input[name="job_code[]"]').value = data.code || data.id || '';
       fieldset.querySelector('input[name="job_description[]"]').value = data.description || '';
       fieldset.querySelector('input[name="repair_type[]"]').value = data.repair_type || '';
+      applySpecialJobLayout(fieldset);
       recalculateLabor(fieldset);
     },
     () => {
       fieldset.querySelector('input[name="job_code[]"]').value = '';
       fieldset.querySelector('input[name="job_description[]"]').value = '';
       fieldset.querySelector('input[name="repair_type[]"]').value = '';
+      applySpecialJobLayout(fieldset);
       recalculateLabor(fieldset);
     }
   );
@@ -765,6 +806,18 @@ function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
 }
 
 async function recalculateLabor(fieldset) {
+  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
+  if (jobCode === 'E001II') {
+    const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+    const laborNote = fieldset.querySelector('.labor-note');
+    if (laborInput) {
+      laborInput.value = '0.5';
+      laborInput.readOnly = true;
+    }
+    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
+    return;
+  }
+
   const model = document.getElementById('model_family')?.value?.trim() || '';
   const partNumber = fieldset.querySelector('input[name="part_number[]"]')?.value?.trim() || '';
   const repairCode = fieldset.querySelector('input[name="repair_type[]"]')?.value?.trim() || '';
@@ -1054,6 +1107,8 @@ async function submitRepair(event) {
       formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
       formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
       formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
+      const bottleInput = section.querySelector("[name='bottle_number[]']");
+      formData.append(`job[${index}][bottle_number]`, bottleInput ? bottleInput.value : "");
       formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
       formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
     });
