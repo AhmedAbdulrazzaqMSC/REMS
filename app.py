@@ -2,7 +2,7 @@ import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy import text, or_
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -89,11 +89,42 @@ class RepairJob(db.Model):
     description = db.Column(db.String(255))
     part_number = db.Column(db.String(100))
     part_description = db.Column(db.String(255))
-    quantity = db.Column(db.Integer)
+    quantity = db.Column(db.Float)
     damage_type = db.Column(db.String(50))
     old_serial = db.Column(db.String(100))
     new_serial = db.Column(db.String(100))
     labor_hours = db.Column(db.Float)
+
+class JobCodeMaster(db.Model):
+    __tablename__ = 'job_code_master'
+    id = db.Column(db.Integer, primary_key=True)
+    job_code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=False, index=True)
+    job_code_type = db.Column(db.String(50), nullable=False)
+    component_code = db.Column(db.String(50))
+    repair_type = db.Column(db.String(50))
+    damage_location = db.Column(db.String(50))
+    damage_type = db.Column(db.String(50))
+    material_type = db.Column(db.String(50))
+
+class SparePartMaster(db.Model):
+    __tablename__ = 'spare_part_master'
+    id = db.Column(db.Integer, primary_key=True)
+    part_number = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    replaced_by = db.Column(db.String(100))
+    description = db.Column(db.String(500), index=True)
+    max_qty = db.Column(db.String(50))
+
+class LaborRuleMaster(db.Model):
+    __tablename__ = 'labor_rule_master'
+    id = db.Column(db.Integer, primary_key=True)
+    model_family = db.Column(db.String(50), nullable=False, index=True)
+    part_number = db.Column(db.String(100), nullable=False, index=True)
+    part_description = db.Column(db.String(500))
+    damage_code = db.Column(db.String(50), index=True)
+    repair_code = db.Column(db.String(50), index=True)
+    repair_description = db.Column(db.String(255))
+    first_hour = db.Column(db.Float, nullable=False, default=0)
 
 class Alarm(db.Model):
     __tablename__ = 'alarms'
@@ -136,10 +167,185 @@ class RepairZoneRequest(db.Model):
     current_position = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+def read_local_excel_sheet(file_path, sheet_name):
+    """Read a worksheet from a bundled .xlsx file without an external Excel dependency."""
+    spreadsheet_ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    relationship_ns = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    office_rel_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+    def local_excel_column_index(cell_reference):
+        letters = re.match(r'[A-Z]+', cell_reference or '')
+        if not letters:
+            return 0
+        result = 0
+        for char in letters.group(0):
+            result = result * 26 + ord(char) - 64
+        return result - 1
+
+    with zipfile.ZipFile(file_path) as archive:
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in archive.namelist():
+            shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+            for item in shared_root.findall(f'{{{spreadsheet_ns}}}si'):
+                shared_strings.append(''.join(node.text or '' for node in item.iter(f'{{{spreadsheet_ns}}}t')))
+
+        workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+        selected_sheet = None
+        for sheet in workbook_root.findall(f'.//{{{spreadsheet_ns}}}sheet'):
+            if sheet.attrib.get('name', '').strip().casefold() == sheet_name.strip().casefold():
+                selected_sheet = sheet
+                break
+        if selected_sheet is None:
+            raise ValueError(f'Worksheet {sheet_name!r} not found in {os.path.basename(file_path)}')
+
+        relationship_id = selected_sheet.attrib.get(f'{{{office_rel_ns}}}id')
+        rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        target = None
+        for relation in rels_root.findall(f'{{{relationship_ns}}}Relationship'):
+            if relation.attrib.get('Id') == relationship_id:
+                target = relation.attrib.get('Target')
+                break
+        if not target:
+            raise ValueError(f'Could not locate worksheet {sheet_name!r}')
+
+        worksheet_path = target.lstrip('/') if target.startswith('/xl/') else 'xl/' + target.lstrip('/')
+        worksheet_path = worksheet_path.replace('xl/xl/', 'xl/')
+        sheet_root = ET.fromstring(archive.read(worksheet_path))
+        rows = []
+        for row in sheet_root.findall(f'.//{{{spreadsheet_ns}}}row'):
+            values = {}
+            next_column = 0
+            for cell in row.findall(f'{{{spreadsheet_ns}}}c'):
+                cell_reference = cell.attrib.get('r', '')
+                column = local_excel_column_index(cell_reference) if cell_reference else next_column
+                next_column = column + 1
+                cell_type = cell.attrib.get('t')
+                value_node = cell.find(f'{{{spreadsheet_ns}}}v')
+                if cell_type == 'inlineStr':
+                    inline = cell.find(f'{{{spreadsheet_ns}}}is')
+                    value = ''.join(node.text or '' for node in inline.iter(f'{{{spreadsheet_ns}}}t')) if inline is not None else ''
+                else:
+                    value = value_node.text if value_node is not None else ''
+                    if cell_type == 's' and value:
+                        value = shared_strings[int(value)]
+                values[column] = value
+            if values:
+                rows.append([values.get(i, '') for i in range(max(values) + 1)])
+    return rows
+
+
+def seed_master_data():
+    """Load bundled One Vision job codes and spare parts into PostgreSQL once."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    job_file = os.path.join(base_dir, 'job_codes_master.xlsx')
+    parts_file = os.path.join(base_dir, 'parts_master.xlsx')
+
+    if JobCodeMaster.query.count() == 0:
+        if not os.path.exists(job_file):
+            app.logger.warning('Job-code master file not found: %s', job_file)
+        else:
+            rows = read_local_excel_sheet(job_file, 'Job Code Master')
+            if rows:
+                headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+                def val(row, name):
+                    i = headers.get(name.casefold())
+                    return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+                seen = set()
+                for row in rows[1:]:
+                    code = val(row, 'Job Code').upper()
+                    code_type = val(row, 'Job Code Type')
+                    if not code or code in seen or code_type.casefold() not in {'machinery', 'service'}:
+                        continue
+                    seen.add(code)
+                    db.session.add(JobCodeMaster(
+                        job_code=code,
+                        description=val(row, 'Job Code Description'),
+                        job_code_type=code_type,
+                        component_code=val(row, 'Component Code'),
+                        repair_type=val(row, 'Repair Type'),
+                        damage_location=val(row, 'Damage Location'),
+                        damage_type=val(row, 'Damage Type'),
+                        material_type=val(row, 'Material Type')
+                    ))
+                db.session.commit()
+                app.logger.info('Loaded %s One Vision job codes', len(seen))
+
+    model_files = {
+        'PrimeLine': 'Primeline.xlsx',
+        'OptimaLine': 'Optimaline.xlsx',
+        'StarCool': 'Starcool.xlsx',
+        'ThinLINE': 'Thinline.xlsx',
+        'EliteLINE': 'Eliteline.xlsx',
+        'NaturaLINE': 'Naturaline.xlsx',
+    }
+
+    # The six model-specific masters are the source for both parts and First Hour labor.
+    # No OneDrive or monthly parts workbook is required.
+    if SparePartMaster.query.count() == 0 or LaborRuleMaster.query.count() == 0:
+        existing_parts = {p.part_number for p in SparePartMaster.query.all()}
+        existing_rules = {(r.model_family, r.part_number, r.damage_code, r.repair_code)
+                          for r in LaborRuleMaster.query.all()}
+        parts_added = 0
+        rules_added = 0
+        for model_family, filename in model_files.items():
+            file_path = os.path.join(base_dir, filename)
+            if not os.path.exists(file_path):
+                app.logger.warning('Model labor master not found: %s', file_path)
+                continue
+            rows = read_local_excel_sheet(file_path, 'Export')
+            if not rows:
+                continue
+            headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+            def val(row, name):
+                i = headers.get(name.casefold())
+                return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+            for row in rows[1:]:
+                part_number = val(row, 'part_code').upper()
+                description = val(row, 'Part_Description')
+                damage_code = val(row, 'DamageCode').upper()
+                repair_code = val(row, 'RepairCode').upper()
+                if not part_number:
+                    continue
+                if part_number not in existing_parts:
+                    db.session.add(SparePartMaster(
+                        part_number=part_number, replaced_by='', description=description, max_qty=''
+                    ))
+                    existing_parts.add(part_number)
+                    parts_added += 1
+                first_hour_text = val(row, 'FirstHour')
+                try:
+                    first_hour = float(first_hour_text or 0)
+                except (TypeError, ValueError):
+                    first_hour = 0.0
+                rule_key = (model_family, part_number, damage_code, repair_code)
+                if rule_key not in existing_rules:
+                    db.session.add(LaborRuleMaster(
+                        model_family=model_family,
+                        part_number=part_number,
+                        part_description=description,
+                        damage_code=damage_code,
+                        repair_code=repair_code,
+                        repair_description=val(row, 'Repair_description'),
+                        first_hour=first_hour
+                    ))
+                    existing_rules.add(rule_key)
+                    rules_added += 1
+            db.session.flush()
+        db.session.commit()
+        app.logger.info('Loaded %s model spare parts and %s labor rules', parts_added, rules_added)
+
 # Initialize DB
 with app.app_context():
     try:
         db.create_all()
+        # Existing REMS databases may still have repair_jobs.quantity as INTEGER.
+        # PostgreSQL safely converts existing integer quantities to double precision.
+        try:
+            db.session.execute(text("ALTER TABLE repair_jobs ALTER COLUMN quantity TYPE DOUBLE PRECISION USING quantity::double precision"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        seed_master_data()
         db.session.execute(text("SELECT 1"))
         app.logger.info("Database initialized successfully")
     except Exception as e:
@@ -180,6 +386,98 @@ def login():
     if username in valid_users and valid_users[username] == password:
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+
+# --------- MASTER DATA ----------
+@app.route('/api/job-codes', methods=['GET'])
+def search_job_codes():
+    q = str(request.args.get('q') or '').strip()
+    query = JobCodeMaster.query
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            JobCodeMaster.job_code.ilike(pattern),
+            JobCodeMaster.description.ilike(pattern)
+        ))
+    jobs = query.order_by(JobCodeMaster.job_code.asc()).limit(50).all()
+    return jsonify({"results": [{
+        "id": job.job_code,
+        "text": f"{job.job_code} — {job.description}",
+        "code": job.job_code,
+        "description": job.description,
+        "type": job.job_code_type,
+        "component_code": job.component_code or "",
+        "repair_type": job.repair_type or "",
+        "material_type": job.material_type or ""
+    } for job in jobs]})
+
+@app.route('/api/parts', methods=['GET'])
+def search_spare_parts():
+    q = str(request.args.get('q') or '').strip()
+    query = SparePartMaster.query
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            SparePartMaster.part_number.ilike(pattern),
+            SparePartMaster.description.ilike(pattern),
+            SparePartMaster.replaced_by.ilike(pattern)
+        ))
+    parts = query.order_by(SparePartMaster.part_number.asc()).limit(50).all()
+    return jsonify({"results": [{
+        "id": part.part_number,
+        "text": f"{part.part_number} — {part.description or ''}",
+        "part_number": part.part_number,
+        "description": part.description or "",
+        "replaced_by": part.replaced_by or "",
+        "max_qty": part.max_qty or ""
+    } for part in parts]})
+
+@app.route('/api/labor-hours', methods=['GET'])
+def get_labor_hours():
+    model_text = str(request.args.get('model') or '').strip().casefold()
+    part_number = str(request.args.get('part_number') or '').strip().upper()
+    repair_code = str(request.args.get('repair_code') or '').strip().upper()
+    quantity_text = str(request.args.get('quantity') or '1').strip()
+    try:
+        quantity = float(quantity_text or 1)
+    except ValueError:
+        quantity = 1.0
+
+    aliases = [
+        ('optimaline', 'OptimaLine'), ('optima line', 'OptimaLine'),
+        ('primeline', 'PrimeLine'), ('prime line', 'PrimeLine'),
+        ('starcool', 'StarCool'), ('star cool', 'StarCool'),
+        ('thinline', 'ThinLINE'), ('thin line', 'ThinLINE'),
+        ('eliteline', 'EliteLINE'), ('elite line', 'EliteLINE'),
+        ('naturaline', 'NaturaLINE'), ('natura line', 'NaturaLINE'),
+    ]
+    model_family = next((family for alias, family in aliases if alias in model_text), '')
+    if not model_family or not part_number:
+        return jsonify({'status': 'not_found', 'first_hour': 0, 'labor_hours': 0})
+
+    query = LaborRuleMaster.query.filter_by(model_family=model_family, part_number=part_number)
+    # Current REMS/One Vision rule: Damage Type is always Broken (BR).
+    broken = query.filter(LaborRuleMaster.damage_code == 'BR')
+    if repair_code:
+        exact = broken.filter(LaborRuleMaster.repair_code == repair_code).first()
+        rule = exact or broken.first()
+    else:
+        rule = broken.first()
+    if rule is None:
+        rule = query.first()
+    if rule is None:
+        return jsonify({'status': 'not_found', 'model_family': model_family, 'first_hour': 0, 'labor_hours': 0})
+
+    labor_hours = round((rule.first_hour or 0) * quantity, 2)
+    is_cable = 'cable' in (rule.part_description or '').casefold()
+    return jsonify({
+        'status': 'success',
+        'model_family': model_family,
+        'first_hour': rule.first_hour or 0,
+        'labor_hours': labor_hours,
+        'repair_code': rule.repair_code or '',
+        'is_cable': is_cable,
+        'quantity_note': '1 roll = 18 m' if is_cable else ''
+    })
 
 # --------- REPAIR LIST ----------
 @app.route('/api/repair-list', methods=['GET'])
@@ -351,7 +649,7 @@ def submit_report():
                 description=form_data.get(f'job[{i}][description]'),
                 part_number=form_data.get(f'job[{i}][part_number]'),
                 part_description=form_data.get(f'job[{i}][part_description]'),
-                quantity=int(form_data.get(f'job[{i}][quantity]') or 1),
+                quantity=float(form_data.get(f'job[{i}][quantity]') or 1),
                 damage_type=form_data.get(f'job[{i}][damage_type]'),
                 old_serial=form_data.get(f'job[{i}][old_serial]'),
                 new_serial=form_data.get(f'job[{i}][new_serial]'),
