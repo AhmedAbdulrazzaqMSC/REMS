@@ -329,49 +329,6 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-const jobData = [
-  { code: "A011A", part: "38-00557-00", description: "Fan, Evaporator", hours: 0.5 },
-  { code: "A018A", part: "12-56012", description: "Controller ML3, Green Label, Repaired", hours: 1.0 },
-  { code: "A037A", part: "76-66694-00", description: "Sensor, Humidity W/Bracket (HS)", hours: 1.25 },
-  { code: "B075A", part: "81-04203-25", description: "Condenser Coil (ALU/ALU)", hours: 4.0 },
-  { code: "B075A", part: "69NT43-202-20PK5", description: "Condenser Coil, 4-Row", hours: 4.0 },
-  { code: "B075A", part: "81-04203-21", description: "Condenser Coil, Assembly (excl all related jobs)", hours: 4.0 },
-  { code: "B064A", part: "18-10129-22", description: "COMPRESSOR, THINLINE", hours: 3.25 },
-  { code: "A030A", part: "54-00742-00", description: "Motor, evaporator", hours: 2.0 },
-  { code: "B064A", part: "18-10178-22", description: "COMPRESSOR SCROLL PRIMELINE", hours: 2.0 },
-  { code: "A005A", part: "22-50088-02", description: "Capacitor, CFM, 15uF", hours: 1.5 },
-  { code: "A005A", part: "22-50088-00", description: "Capacitor, EF, 20uF (High Speed)", hours: 1.5 },
-  { code: "A037A", part: "76-66694-00", description: "Sensor, Humidity W/Bracket  (HS)", hours: 1.25 },
-  { code: "A018A", part: "12-56009", description: "Controller ML3, Yellow Label, Repaired", hours: 1.0 },
-  { code: "A018A", part: "12-56012", description: "Controller ML3, Green Label, Repaired", hours: 1.0 },
-  { code: "A008A", part: "66U1-7842-13", description: "Breaker, Circuit - 460 vac, 25 Amp, (CB1)", hours: 1.0 },
-  { code: "B069A", part: "76-50210-00", description: "Kit, Compressor Terminal Wiring (Single Voltage)", hours: 1.0 },
-  { code: "A013A", part: "10-00431-07", description: "Contactor, 30A", hours: 0.75 },
-  { code: "A058A", part: "12-00395-01SV", description: "Sensor, Supply, Assembly (SRS & STS)", hours: 0.75 },
-  { code: "B074A", part: "07-00292-00", description: "SW20 Compressor Oil, Castrol Icematic (Quart) (1 liter)", hours: 0.5 },
-  { code: "B087A", part: "14-00464-20", description: "Filter Drier, with O-Rings", hours: 0.5 },
-  { code: "B094A", part: "12-00309-06", description: "Switch, High Pressure (HPS)", hours: 0.5 },
-  { code: "A002A", part: "22-66651-20", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A002X", part: "22-50463-00PK50", description: "SPLICE KIT FAST III", hours: 0.5 },
-  { code: "A002X", part: "22-50463-00PK5", description: "SPLICE KIT FAST III", hours: 0.5 },
-  { code: "A002A", part: "22-66654-20", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A001A", part: "22-02378-00PK10", description: "Plug, Power", hours: 0.5 },
-  { code: "A028A", part: "10-00439-00", description: "Transformer, Current Sensing (CS)", hours: 0.5 },
-  { code: "A053A", part: "12-00495-02SV", description: "Sensor, Ambient / Defrost kit (AMBS / DTS)", hours: 0.5 },
-  { code: "A001A", part: "818559A", description: "Power plug", hours: 0.5 },
-  { code: "A002A", part: "818831A", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A002X", part: "818260A", description: "Splice kit, AKS to NSK", hours: 0.5 },
-  { code: "A011A", part: "38-00557-00", description: "Fan, Evaporator", hours: 0.5 },
-  { code: "A051A", part: "12-00495-02SV", description: "Sensor, Ambient / Defrost kit (AMBS / DTS)", hours: 0.5 },
-  { code: "A028A", part: "10-00439-02", description: "Transformer, Current Sensing (CS)", hours: 0.5 },
-  { code: "A039A", part: "79-66669-05", description: "Keypad Assy", hours: 0.5 },
-  { code: "A029A", part: "12-00433-00RB", description: "Module, Display (Repaired)", hours: 0.5 },
-  { code: "A039A", part: "79-66669-04", description: "Keypad, Assembly", hours: 0.5 },
-  { code: "A034A", part: "22-02336-08", description: "Fuse, 7.5 Amp", hours: 0.25 },
-  { code: "A041A", part: "30-50377-00", description: "Controller/DataCORDER Module Standard Battery Holder with Connector", hours: 0.25 },
-  { code: "B123A", part: "14-00353-20", description: "Piston and Motor Assembly", hours: 0.25 },
-  { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
-];
 let selectedContainerNumber = '';
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -620,73 +577,132 @@ function addJob() {
   const fieldset = document.createElement("fieldset");
   fieldset.classList.add("job-section");
 
-  let options = "";
-  jobData.forEach(j => {
-    options += `<option value="${j.code}">${j.description}</option>`;
-  });
-
   fieldset.innerHTML = `
     <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
-    <label>Job Description</label>
-    <select name="job_description[]" class="job-select" onchange="fillJobData(this)">
-      <option value="">Select</option>
-      ${options}
-    </select>
-    <label>Job Code</label>
-    <input type="text" name="job_code[]" readonly>
-    <label>Part Number</label>
-    <input type="text" name="part_number[]">
-    <label>Part Description</label>
-    <input type="text" name="part_description[]" readonly>
-    <label>Quantity</label>
-    <input type="number" name="quantity[]">
-    <label>Damage Type</label>
-    <select name="damage_type[]">
-      <option value="">Select</option>
-      <option value="BK">BK - Blocked</option>
-      <option value="BL">BL - Blowout</option>
-      <option value="BN">BN - Burned</option>
-      <option value="BR">BR - Broken/Split</option>
-      <option value="CO">CO - Corroded/Rusty</option>
-      <option value="CT">CT - Contaminated</option>
-      <option value="CU">CU - Cut</option>
-      <option value="CW">CW - Cracked weld</option>
-      <option value="DT">DT - Dent</option>
-      <option value="DY">DY - Dirty</option>
-      <option value="IR">IR - Improper Repair</option>
-      <option value="LF">LF - Low Fluid Level</option>
-      <option value="LK">LK - Leak</option>
-      <option value="LO">LO - Loose</option>
-      <option value="MS">MS - Missing/Lost</option>
-      <option value="OC">OC - Out of calibration</option>
-      <option value="OL">OL - Oil saturated</option>
-      <option value="RA">RA - Remove For Access</option>
-      <option value="RN">RN - Repair Necessary</option>
-      <option value="SH">SH - Short/Open circuit</option>
-      <option value="TR">TR - Test Required</option>
-      <option value="ZZ">ZZ - Not Applicable</option>
-    </select>
-    <label>Old Serial Number</label>
+
+    <label>Job / Repair Performed</label>
+    <select class="job-master-select" style="width:100%" required></select>
+    <input type="hidden" name="job_description[]">
+    <input type="hidden" name="job_code[]">
+    <input type="hidden" name="repair_type[]">
+
+    <label>Used Part</label>
+    <select class="part-master-select" style="width:100%"></select>
+    <input type="hidden" name="part_number[]">
+    <input type="hidden" name="part_description[]">
+
+    <label>Quantity <span class="quantity-note" style="font-weight:normal;color:#666"></span></label>
+    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
+
+    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_old[]">
-    <label>New Serial Number</label>
+
+    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_new[]">
-    <input type="hidden" name="labor_hours[]" readonly>
+
+    <label>Labor Hours</label>
+    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
+    <small class="labor-note" style="display:block;color:#666;margin-top:-6px;margin-bottom:8px">Select model, job and part to calculate automatically.</small>
+
+    <input type="hidden" name="damage_type[]" value="BR">
   `;
   container.appendChild(fieldset);
-  $(fieldset).find('.job-select').select2({ width: '100%' });
+  initializeMasterSelects(fieldset);
 }
 
-function fillJobData(selectElem) {
-  const selectedCode = selectElem.value;
-  const job = jobData.find(j => j.code === selectedCode);
-  if (!job) return;
-  const container = selectElem.closest("fieldset");
-  container.querySelector('input[name="job_code[]"]').value = job.code;
-  container.querySelector('input[name="part_number[]"]').value = job.part;
-  container.querySelector('input[name="part_description[]"]').value = job.description;
-  container.querySelector('input[name="labor_hours[]"]').value = job.hours;
-  selectElem.setAttribute("data-description", job.description);
+function initializeMasterSelects(fieldset) {
+  const jobSelect = $(fieldset).find('.job-master-select');
+  const partSelect = $(fieldset).find('.part-master-select');
+
+  jobSelect.select2({
+    width: '100%',
+    placeholder: 'Search job code or repair description',
+    minimumInputLength: 1,
+    ajax: {
+      url: '/api/job-codes',
+      dataType: 'json',
+      delay: 200,
+      data: params => ({ q: params.term || '' }),
+      processResults: data => data
+    }
+  });
+
+  jobSelect.on('select2:select', function(e) {
+    const data = e.params.data || {};
+    fieldset.querySelector('input[name="job_code[]"]').value = data.code || data.id || '';
+    fieldset.querySelector('input[name="job_description[]"]').value = data.description || '';
+    fieldset.querySelector('input[name="repair_type[]"]').value = data.repair_type || '';
+    recalculateLabor(fieldset);
+  });
+  jobSelect.on('select2:clear', function() {
+    fieldset.querySelector('input[name="job_code[]"]').value = '';
+    fieldset.querySelector('input[name="job_description[]"]').value = '';
+    fieldset.querySelector('input[name="repair_type[]"]').value = '';
+    recalculateLabor(fieldset);
+  });
+
+  partSelect.select2({
+    width: '100%',
+    placeholder: 'Search part number or description (optional)',
+    allowClear: true,
+    minimumInputLength: 1,
+    ajax: {
+      url: '/api/parts',
+      dataType: 'json',
+      delay: 200,
+      data: params => ({ q: params.term || '' }),
+      processResults: data => data
+    }
+  });
+
+  partSelect.on('select2:select', function(e) {
+    const data = e.params.data || {};
+    fieldset.querySelector('input[name="part_number[]"]').value = data.part_number || data.id || '';
+    fieldset.querySelector('input[name="part_description[]"]').value = data.description || '';
+    recalculateLabor(fieldset);
+  });
+  partSelect.on('select2:clear', function() {
+    fieldset.querySelector('input[name="part_number[]"]').value = '';
+    fieldset.querySelector('input[name="part_description[]"]').value = '';
+    fieldset.querySelector('.quantity-note').textContent = '';
+    recalculateLabor(fieldset);
+  });
+
+  fieldset.querySelector('input[name="quantity[]"]').addEventListener('input', () => recalculateLabor(fieldset));
 }
+
+async function recalculateLabor(fieldset) {
+  const model = document.getElementById('model')?.value?.trim() || '';
+  const partNumber = fieldset.querySelector('input[name="part_number[]"]')?.value?.trim() || '';
+  const repairCode = fieldset.querySelector('input[name="repair_type[]"]')?.value?.trim() || '';
+  const quantity = fieldset.querySelector('input[name="quantity[]"]')?.value || '1';
+  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+  const laborNote = fieldset.querySelector('.labor-note');
+  const quantityNote = fieldset.querySelector('.quantity-note');
+  if (!laborInput || !model || !partNumber) {
+    if (laborNote) laborNote.textContent = 'Select model, job and part to calculate automatically.';
+    return;
+  }
+  try {
+    const params = new URLSearchParams({ model, part_number: partNumber, repair_code: repairCode, quantity });
+    const response = await fetch('/api/labor-hours?' + params.toString());
+    const data = await response.json();
+    if (data.status === 'success') {
+      laborInput.value = Number(data.labor_hours || 0).toFixed(2).replace(/\.00$/, '');
+      if (laborNote) laborNote.textContent = `Auto: ${data.first_hour} h × ${quantity} = ${data.labor_hours} h (${data.model_family})`;
+      if (quantityNote) quantityNote.textContent = data.is_cable ? '— 1 roll = 18 m' : '';
+    } else {
+      if (laborNote) laborNote.textContent = 'No matching First Hour found — enter Labor Hours manually.';
+      if (quantityNote) quantityNote.textContent = '';
+    }
+  } catch (err) {
+    if (laborNote) laborNote.textContent = 'Automatic labor lookup unavailable — enter Labor Hours manually.';
+  }
+}
+
+document.getElementById('model')?.addEventListener('change', () => {
+  document.querySelectorAll('.job-section').forEach(section => recalculateLabor(section));
+});
 
 function addPhoto(sectionId) {
   const container = document.getElementById(sectionId);
@@ -811,55 +827,29 @@ function removeAlarm(button) {
 function addUndefinedJob() {
   const container = document.querySelector("#jobContainer fieldset");
   const fieldset = document.createElement("fieldset");
-  fieldset.classList.add("job-section");  
+  fieldset.classList.add("job-section");
 
   fieldset.innerHTML = `
     <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
     <label>Job Description</label>
-    <input type="text" name="job_description[]">
+    <input type="text" name="job_description[]" required placeholder="Describe the repair performed">
     <label>Job Code</label>
-    <input type="text" name="job_code[]">
+    <input type="text" name="job_code[]" placeholder="Optional">
     <label>Part Number</label>
-    <input type="text" name="part_number[]">
+    <input type="text" name="part_number[]" placeholder="Optional">
     <label>Part Description</label>
-    <input type="text" name="part_description[]">
+    <input type="text" name="part_description[]" placeholder="Optional">
     <label>Quantity</label>
-    <input type="number" name="quantity[]">
-    <label>Damage Type</label>
-    <select name="damage_type[]">
-      <option value="">Select</option>
-      <option value="BK">BK - Blocked</option>
-      <option value="BL">BL - Blowout</option>
-      <option value="BN">BN - Burned</option>
-      <option value="BR">BR - Broken/Split</option>
-      <option value="CO">CO - Corroded/Rusty</option>
-      <option value="CT">CT - Contaminated</option>
-      <option value="CU">CU - Cut</option>
-      <option value="CW">CW - Cracked weld</option>
-      <option value="DT">DT - Dent</option>
-      <option value="DY">DY - Dirty</option>
-      <option value="IR">IR - Improper Repair</option>
-      <option value="LF">LF - Low Fluid Level</option>
-      <option value="LK">LK - Leak</option>
-      <option value="LO">LO - Loose</option>
-      <option value="MS">MS - Missing/Lost</option>
-      <option value="OC">OC - Out of calibration</option>
-      <option value="OL">OL - Oil saturated</option>
-      <option value="RA">RA - Remove For Access</option>
-      <option value="RN">RN - Repair Necessary</option>
-      <option value="SH">SH - Short/Open circuit</option>
-      <option value="TR">TR - Test Required</option>
-      <option value="ZZ">ZZ - Not Applicable</option>
-    </select>
-    <label>Old Serial Number</label>
+    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
+    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_old[]">
-    <label>New Serial Number</label>
+    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_new[]">
     <label>Labor Hours</label>
-    <input type="text" name="labor_hours[]">
+    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
+    <input type="hidden" name="damage_type[]" value="BR">
   `;
   container.appendChild(fieldset);
-  $(fieldset).find('.job-select').select2({ width: '100%' });
 }
 
 function removeJob(button) {
