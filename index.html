@@ -284,6 +284,11 @@
       <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
       <img class="photo-preview">
       <div class="compression-info"></div>
+    <div class="photo-container">
+      <input class="photo-input" name="fotos_voor_extra" type="file" accept="image/*" onchange="handleImageUpload(this)">
+      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <img class="photo-preview">
+      <div class="compression-info"></div>
     </div>
   </div>
   <button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
@@ -293,6 +298,11 @@
   <div id="fotos_na">
     <div class="photo-container">
       <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)">
+      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <img class="photo-preview">
+      <div class="compression-info"></div>
+    <div class="photo-container">
+      <input class="photo-input" name="fotos_na_extra" type="file" accept="image/*" onchange="handleImageUpload(this)">
       <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
       <img class="photo-preview">
       <div class="compression-info"></div>
@@ -920,9 +930,9 @@ function addPhoto(sectionId) {
   const container = document.getElementById(sectionId);
   const photoCount = container.querySelectorAll('input[type="file"]').length;
   
-  // Limit to 2 photos per section (2 before + 2 after = 4 total)
-  if (photoCount >= 2) {
-    alert("Maximum 2 photos allowed per section (4 total)");
+  // Allow up to 10 photos per section.
+  if (photoCount >= 10) {
+    alert("Maximum 10 photos allowed per section");
     return;
   }
 
@@ -1082,13 +1092,19 @@ async function submitRepair(event) {
   submitButton.innerHTML = '<span class="spinner"></span> Processing...';
 
   try {
-    // Check photo limits
-    const beforePhotos = document.querySelectorAll('#fotos_voor input[type="file"]');
-    const afterPhotos = document.querySelectorAll('#fotos_na input[type="file"]');
-    
-    if (beforePhotos.length + afterPhotos.length > 4) {
-      alert("Maximum 4 photos allowed (2 before + 2 after)");
-      throw new Error("Too many photos");
+    // Require minimum 2 and maximum 10 selected photos in each section.
+    const beforePhotos = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'))
+      .filter(input => input.files && input.files.length > 0);
+    const afterPhotos = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'))
+      .filter(input => input.files && input.files.length > 0);
+
+    if (beforePhotos.length < 2 || beforePhotos.length > 10) {
+      alert("Please select minimum 2 and maximum 10 Before photos");
+      throw new Error("Invalid before photo count");
+    }
+    if (afterPhotos.length < 2 || afterPhotos.length > 10) {
+      alert("Please select minimum 2 and maximum 10 After photos");
+      throw new Error("Invalid after photo count");
     }
 
     // Validate temperature inputs
@@ -1182,7 +1198,7 @@ async function submitRepair(event) {
       alert("❌ Error submitting report: " + result.message);
     }
   } catch (error) {
-    if (error.message !== "Too many photos" && error.message !== "Invalid temperature values") {
+    if (error.message !== "Invalid before photo count" && error.message !== "Invalid after photo count" && error.message !== "Invalid temperature values") {
       alert("❌ Network error: " + error.message);
     }
   } finally {
