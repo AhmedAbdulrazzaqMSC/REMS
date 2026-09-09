@@ -242,7 +242,17 @@
 <label for="containernr">CONTAINERNR</label><input id="containernr" name="containernr" oninput="this.value = this.value.toUpperCase()" pattern="^[A-Z]{4}[0-9]{7}$" required="" title="Must be 4 letters followed by 7 digits (e.g., MSDU9823150)" type="text"/>
 <label for="datum">DATUM (Date)</label><input id="datum" name="datum" required="" type="date">
 <label for="naam">NAAM (Technician Name)</label><input id="naam" name="naam" readonly="" required="" type="text"/>
-<label for="model">MODEL</label><input id="model" name="model" required="" type="text"/>
+<label for="model">MODEL NR</label><input id="model" name="model" required="" type="text"/>
+<label for="model_family">MODEL FAMILY</label>
+<select id="model_family" name="model_family" required>
+  <option value="">Select model family</option>
+  <option value="PrimeLine">PrimeLine</option>
+  <option value="OptimaLine">OptimaLine</option>
+  <option value="StarCool">StarCool</option>
+  <option value="ThinLINE">ThinLINE</option>
+  <option value="EliteLINE">EliteLINE</option>
+  <option value="NaturaLINE">NaturaLINE</option>
+</select>
 <label for="serienr">SERIENR.</label><input id="serienr" name="serienr" required="" type="text"/>
 <label for="warranty_id">WARRANTY ID NR</label><input id="warranty_id" name="warranty_id" required="" type="text"/>
 <label for="garantie">GARANTIE</label><input id="garantie" name="garantie" required="" type="text"/>
@@ -632,7 +642,7 @@ function addJob() {
     <label>Labor Hours</label>
     <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
     <small class="labor-note" style="display:block;color:#666;margin-top:-6px;margin-bottom:8px">
-      Enter/select the reefer model above to calculate Labor Hours.
+      Select Model Family above to calculate Labor Hours.
     </small>
 
     <input type="hidden" name="damage_type[]" value="BR">
@@ -755,7 +765,7 @@ function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
 }
 
 async function recalculateLabor(fieldset) {
-  const model = document.getElementById('model')?.value?.trim() || '';
+  const model = document.getElementById('model_family')?.value?.trim() || '';
   const partNumber = fieldset.querySelector('input[name="part_number[]"]')?.value?.trim() || '';
   const repairCode = fieldset.querySelector('input[name="repair_type[]"]')?.value?.trim() || '';
   const quantity = fieldset.querySelector('input[name="quantity[]"]')?.value || '1';
@@ -767,7 +777,7 @@ async function recalculateLabor(fieldset) {
 
   if (!model) {
     laborInput.value = '0';
-    if (laborNote) laborNote.textContent = 'Enter/select the reefer model above to calculate Labor Hours.';
+    if (laborNote) laborNote.textContent = 'Select Model Family above to calculate Labor Hours.';
     return;
   }
   if (!partNumber) {
@@ -806,7 +816,7 @@ async function recalculateLabor(fieldset) {
 }
 
 ['input', 'change'].forEach(eventName => {
-  document.getElementById('model')?.addEventListener(eventName, () => {
+  document.getElementById('model_family')?.addEventListener(eventName, () => {
     document.querySelectorAll('.job-section').forEach(section => recalculateLabor(section));
   });
 });
