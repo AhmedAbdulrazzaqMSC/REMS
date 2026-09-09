@@ -2,7 +2,7 @@ import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy import text, or_
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -65,6 +65,7 @@ class RepairReport(db.Model):
     report_date = db.Column(db.Date, nullable=False)
     technician_name = db.Column(db.String(100), nullable=False)
     model = db.Column(db.String(100))
+    model_family = db.Column(db.String(50))
     serial_number = db.Column(db.String(100))
     warranty_id = db.Column(db.String(100))
     warranty_status = db.Column(db.String(100))
@@ -89,11 +90,43 @@ class RepairJob(db.Model):
     description = db.Column(db.String(255))
     part_number = db.Column(db.String(100))
     part_description = db.Column(db.String(255))
-    quantity = db.Column(db.Integer)
+    quantity = db.Column(db.Float)
     damage_type = db.Column(db.String(50))
     old_serial = db.Column(db.String(100))
     new_serial = db.Column(db.String(100))
+    bottle_number = db.Column(db.String(100))
     labor_hours = db.Column(db.Float)
+
+class JobCodeMaster(db.Model):
+    __tablename__ = 'job_code_master'
+    id = db.Column(db.Integer, primary_key=True)
+    job_code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=False, index=True)
+    job_code_type = db.Column(db.String(50), nullable=False)
+    component_code = db.Column(db.String(50))
+    repair_type = db.Column(db.String(50))
+    damage_location = db.Column(db.String(50))
+    damage_type = db.Column(db.String(50))
+    material_type = db.Column(db.String(50))
+
+class SparePartMaster(db.Model):
+    __tablename__ = 'spare_part_master'
+    id = db.Column(db.Integer, primary_key=True)
+    part_number = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    replaced_by = db.Column(db.String(100))
+    description = db.Column(db.String(500), index=True)
+    max_qty = db.Column(db.String(50))
+
+class LaborRuleMaster(db.Model):
+    __tablename__ = 'labor_rule_master'
+    id = db.Column(db.Integer, primary_key=True)
+    model_family = db.Column(db.String(50), nullable=False, index=True)
+    part_number = db.Column(db.String(100), nullable=False, index=True)
+    part_description = db.Column(db.Text)
+    damage_code = db.Column(db.String(50), index=True)
+    repair_code = db.Column(db.String(50), index=True)
+    repair_description = db.Column(db.Text)
+    first_hour = db.Column(db.Float, nullable=False, default=0)
 
 class Alarm(db.Model):
     __tablename__ = 'alarms'
@@ -136,10 +169,229 @@ class RepairZoneRequest(db.Model):
     current_position = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+def read_local_excel_sheet(file_path, sheet_name):
+    """Read a worksheet from a bundled .xlsx file without an external Excel dependency."""
+    spreadsheet_ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    relationship_ns = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    office_rel_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+    def local_excel_column_index(cell_reference):
+        letters = re.match(r'[A-Z]+', cell_reference or '')
+        if not letters:
+            return 0
+        result = 0
+        for char in letters.group(0):
+            result = result * 26 + ord(char) - 64
+        return result - 1
+
+    with zipfile.ZipFile(file_path) as archive:
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in archive.namelist():
+            shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+            for item in shared_root.findall(f'{{{spreadsheet_ns}}}si'):
+                shared_strings.append(''.join(node.text or '' for node in item.iter(f'{{{spreadsheet_ns}}}t')))
+
+        workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+        selected_sheet = None
+        for sheet in workbook_root.findall(f'.//{{{spreadsheet_ns}}}sheet'):
+            if sheet.attrib.get('name', '').strip().casefold() == sheet_name.strip().casefold():
+                selected_sheet = sheet
+                break
+        if selected_sheet is None:
+            raise ValueError(f'Worksheet {sheet_name!r} not found in {os.path.basename(file_path)}')
+
+        relationship_id = selected_sheet.attrib.get(f'{{{office_rel_ns}}}id')
+        rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        target = None
+        for relation in rels_root.findall(f'{{{relationship_ns}}}Relationship'):
+            if relation.attrib.get('Id') == relationship_id:
+                target = relation.attrib.get('Target')
+                break
+        if not target:
+            raise ValueError(f'Could not locate worksheet {sheet_name!r}')
+
+        worksheet_path = target.lstrip('/') if target.startswith('/xl/') else 'xl/' + target.lstrip('/')
+        worksheet_path = worksheet_path.replace('xl/xl/', 'xl/')
+        sheet_root = ET.fromstring(archive.read(worksheet_path))
+        rows = []
+        for row in sheet_root.findall(f'.//{{{spreadsheet_ns}}}row'):
+            values = {}
+            next_column = 0
+            for cell in row.findall(f'{{{spreadsheet_ns}}}c'):
+                cell_reference = cell.attrib.get('r', '')
+                column = local_excel_column_index(cell_reference) if cell_reference else next_column
+                next_column = column + 1
+                cell_type = cell.attrib.get('t')
+                value_node = cell.find(f'{{{spreadsheet_ns}}}v')
+                if cell_type == 'inlineStr':
+                    inline = cell.find(f'{{{spreadsheet_ns}}}is')
+                    value = ''.join(node.text or '' for node in inline.iter(f'{{{spreadsheet_ns}}}t')) if inline is not None else ''
+                else:
+                    value = value_node.text if value_node is not None else ''
+                    if cell_type == 's' and value:
+                        value = shared_strings[int(value)]
+                values[column] = value
+            if values:
+                rows.append([values.get(i, '') for i in range(max(values) + 1)])
+    return rows
+
+
+def seed_master_data():
+    """Load bundled One Vision job codes and spare parts into PostgreSQL once."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    job_file = os.path.join(base_dir, 'job_codes_master.xlsx')
+    parts_file = os.path.join(base_dir, 'parts_master.xlsx')
+
+    if JobCodeMaster.query.count() == 0:
+        if not os.path.exists(job_file):
+            app.logger.warning('Job-code master file not found: %s', job_file)
+        else:
+            rows = read_local_excel_sheet(job_file, 'Job Code Master')
+            if rows:
+                headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+                def val(row, name):
+                    i = headers.get(name.casefold())
+                    return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+                seen = set()
+                for row in rows[1:]:
+                    code = val(row, 'Job Code').upper()
+                    code_type = val(row, 'Job Code Type')
+                    if not code or code in seen or code_type.casefold() not in {'machinery', 'service'}:
+                        continue
+                    seen.add(code)
+                    db.session.add(JobCodeMaster(
+                        job_code=code,
+                        description=val(row, 'Job Code Description'),
+                        job_code_type=code_type,
+                        component_code=val(row, 'Component Code'),
+                        repair_type=val(row, 'Repair Type'),
+                        damage_location=val(row, 'Damage Location'),
+                        damage_type=val(row, 'Damage Type'),
+                        material_type=val(row, 'Material Type')
+                    ))
+                db.session.commit()
+                app.logger.info('Loaded %s One Vision job codes', len(seen))
+
+    model_files = {
+        'PrimeLine': 'Primeline.xlsx',
+        'OptimaLine': 'Optimaline.xlsx',
+        'StarCool': 'Starcool.xlsx',
+        'ThinLINE': 'Thinline.xlsx',
+        'EliteLINE': 'Eliteline.xlsx',
+        'NaturaLINE': 'Naturaline.xlsx',
+    }
+
+    # The six model-specific masters are the source for both parts and First Hour labor.
+    # No OneDrive or monthly parts workbook is required.
+    if SparePartMaster.query.count() == 0 or LaborRuleMaster.query.count() == 0:
+        existing_parts = {p.part_number for p in SparePartMaster.query.all()}
+        existing_rules = {(r.model_family, r.part_number, r.damage_code, r.repair_code)
+                          for r in LaborRuleMaster.query.all()}
+        parts_added = 0
+        rules_added = 0
+        for model_family, filename in model_files.items():
+            file_path = os.path.join(base_dir, filename)
+            if not os.path.exists(file_path):
+                app.logger.warning('Model labor master not found: %s', file_path)
+                continue
+            rows = read_local_excel_sheet(file_path, 'Export')
+            if not rows:
+                continue
+            headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+            def val(row, name):
+                i = headers.get(name.casefold())
+                return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+            for row in rows[1:]:
+                part_number = val(row, 'part_code').upper()
+                description = val(row, 'Part_Description')
+                damage_code = val(row, 'DamageCode').upper()
+                repair_code = val(row, 'RepairCode').upper()
+                repair_description = val(row, 'Repair_description')
+
+                if not part_number:
+                    continue
+
+                # Reject malformed workbook rows instead of letting corrupted cell
+                # contents break PostgreSQL during application startup.
+                if len(part_number) > 100:
+                    app.logger.warning(
+                        "Skipping malformed part number in %s: length=%s, starts_with=%r",
+                        filename, len(part_number), part_number[:80]
+                    )
+                    continue
+                if len(damage_code) > 50 or len(repair_code) > 50:
+                    app.logger.warning(
+                        "Skipping malformed labor rule in %s for part %s",
+                        filename, part_number
+                    )
+                    continue
+
+                description = description[:5000]
+                repair_description = repair_description[:5000]
+                if part_number not in existing_parts:
+                    db.session.add(SparePartMaster(
+                        part_number=part_number, replaced_by='', description=description, max_qty=''
+                    ))
+                    existing_parts.add(part_number)
+                    parts_added += 1
+                first_hour_text = val(row, 'FirstHour')
+                try:
+                    first_hour = float(first_hour_text or 0)
+                except (TypeError, ValueError):
+                    first_hour = 0.0
+                rule_key = (model_family, part_number, damage_code, repair_code)
+                if rule_key not in existing_rules:
+                    db.session.add(LaborRuleMaster(
+                        model_family=model_family,
+                        part_number=part_number,
+                        part_description=description,
+                        damage_code=damage_code,
+                        repair_code=repair_code,
+                        repair_description=repair_description,
+                        first_hour=first_hour
+                    ))
+                    existing_rules.add(rule_key)
+                    rules_added += 1
+            db.session.flush()
+        db.session.commit()
+        app.logger.info('Loaded %s model spare parts and %s labor rules', parts_added, rules_added)
+
 # Initialize DB
 with app.app_context():
     try:
         db.create_all()
+        # Existing REMS databases may still have repair_jobs.quantity as INTEGER.
+        # PostgreSQL safely converts existing integer quantities to double precision.
+        try:
+            db.session.execute(text("ALTER TABLE repair_jobs ALTER COLUMN quantity TYPE DOUBLE PRECISION USING quantity::double precision"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        # Add fields introduced by the REMS One Vision workflow to existing databases.
+        try:
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS model_family VARCHAR(50)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS bottle_number VARCHAR(100)"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        # Upgrade description columns on an existing REMS database before seeding.
+        try:
+            db.session.execute(text(
+                "ALTER TABLE labor_rule_master "
+                "ALTER COLUMN part_description TYPE TEXT, "
+                "ALTER COLUMN repair_description TYPE TEXT"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        seed_master_data()
         db.session.execute(text("SELECT 1"))
         app.logger.info("Database initialized successfully")
     except Exception as e:
@@ -180,6 +432,98 @@ def login():
     if username in valid_users and valid_users[username] == password:
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+
+# --------- MASTER DATA ----------
+@app.route('/api/job-codes', methods=['GET'])
+def search_job_codes():
+    q = str(request.args.get('q') or '').strip()
+    query = JobCodeMaster.query
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            JobCodeMaster.job_code.ilike(pattern),
+            JobCodeMaster.description.ilike(pattern)
+        ))
+    jobs = query.order_by(JobCodeMaster.job_code.asc()).limit(50).all()
+    return jsonify({"results": [{
+        "id": job.job_code,
+        "text": f"{job.job_code} — {job.description}",
+        "code": job.job_code,
+        "description": job.description,
+        "type": job.job_code_type,
+        "component_code": job.component_code or "",
+        "repair_type": job.repair_type or "",
+        "material_type": job.material_type or ""
+    } for job in jobs]})
+
+@app.route('/api/parts', methods=['GET'])
+def search_spare_parts():
+    q = str(request.args.get('q') or '').strip()
+    query = SparePartMaster.query
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            SparePartMaster.part_number.ilike(pattern),
+            SparePartMaster.description.ilike(pattern),
+            SparePartMaster.replaced_by.ilike(pattern)
+        ))
+    parts = query.order_by(SparePartMaster.part_number.asc()).limit(50).all()
+    return jsonify({"results": [{
+        "id": part.part_number,
+        "text": f"{part.part_number} — {part.description or ''}",
+        "part_number": part.part_number,
+        "description": part.description or "",
+        "replaced_by": part.replaced_by or "",
+        "max_qty": part.max_qty or ""
+    } for part in parts]})
+
+@app.route('/api/labor-hours', methods=['GET'])
+def get_labor_hours():
+    model_text = str(request.args.get('model') or '').strip().casefold()
+    part_number = str(request.args.get('part_number') or '').strip().upper()
+    repair_code = str(request.args.get('repair_code') or '').strip().upper()
+    quantity_text = str(request.args.get('quantity') or '1').strip()
+    try:
+        quantity = float(quantity_text or 1)
+    except ValueError:
+        quantity = 1.0
+
+    aliases = [
+        ('optimaline', 'OptimaLine'), ('optima line', 'OptimaLine'),
+        ('primeline', 'PrimeLine'), ('prime line', 'PrimeLine'),
+        ('starcool', 'StarCool'), ('star cool', 'StarCool'),
+        ('thinline', 'ThinLINE'), ('thin line', 'ThinLINE'),
+        ('eliteline', 'EliteLINE'), ('elite line', 'EliteLINE'),
+        ('naturaline', 'NaturaLINE'), ('natura line', 'NaturaLINE'),
+    ]
+    model_family = next((family for alias, family in aliases if alias in model_text), '')
+    if not model_family or not part_number:
+        return jsonify({'status': 'not_found', 'first_hour': 0, 'labor_hours': 0})
+
+    query = LaborRuleMaster.query.filter_by(model_family=model_family, part_number=part_number)
+    # Current REMS/One Vision rule: Damage Type is always Broken (BR).
+    broken = query.filter(LaborRuleMaster.damage_code == 'BR')
+    if repair_code:
+        exact = broken.filter(LaborRuleMaster.repair_code == repair_code).first()
+        rule = exact or broken.first()
+    else:
+        rule = broken.first()
+    if rule is None:
+        rule = query.first()
+    if rule is None:
+        return jsonify({'status': 'not_found', 'model_family': model_family, 'first_hour': 0, 'labor_hours': 0})
+
+    labor_hours = round((rule.first_hour or 0) * quantity, 2)
+    is_cable = 'cable' in (rule.part_description or '').casefold()
+    return jsonify({
+        'status': 'success',
+        'model_family': model_family,
+        'first_hour': rule.first_hour or 0,
+        'labor_hours': labor_hours,
+        'repair_code': rule.repair_code or '',
+        'is_cable': is_cable,
+        'quantity_note': '1 roll = 18 m' if is_cable else ''
+    })
 
 # --------- REPAIR LIST ----------
 @app.route('/api/repair-list', methods=['GET'])
@@ -324,6 +668,7 @@ def submit_report():
             report_date=datetime.strptime(form_data.get('datum'), '%Y-%m-%d').date(),
             technician_name=form_data.get('naam'),
             model=form_data.get('model'),
+            model_family=form_data.get('model_family'),
             serial_number=form_data.get('serienr'),
             warranty_id=form_data.get('warranty_id'),
             warranty_status=form_data.get('garantie'),
@@ -351,10 +696,11 @@ def submit_report():
                 description=form_data.get(f'job[{i}][description]'),
                 part_number=form_data.get(f'job[{i}][part_number]'),
                 part_description=form_data.get(f'job[{i}][part_description]'),
-                quantity=int(form_data.get(f'job[{i}][quantity]') or 1),
+                quantity=float(form_data.get(f'job[{i}][quantity]') or 1),
                 damage_type=form_data.get(f'job[{i}][damage_type]'),
                 old_serial=form_data.get(f'job[{i}][old_serial]'),
                 new_serial=form_data.get(f'job[{i}][new_serial]'),
+                bottle_number=form_data.get(f'job[{i}][bottle_number]'),
                 labor_hours=float(form_data.get(f'job[{i}][labor_hours]') or 0)
             )
             db.session.add(job)
@@ -364,8 +710,9 @@ def submit_report():
             if alarm.strip():
                 db.session.add(Alarm(report_id=report.id, alarm_code=alarm.strip()))
 
-        # Files
+        # Files — save every selected photo and keep Before/After counts for the email.
         saved_files = []
+        photo_counts = {"before": 0, "after": 0}
         file_counter = 0
         for file_key in files.keys():
             for file in files.getlist(file_key):
@@ -376,6 +723,13 @@ def submit_report():
                     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                     file.save(filepath)
                     saved_files.append(filepath)
+
+                    key_lower = str(file_key).lower()
+                    if "fotos_voor" in key_lower:
+                        photo_counts["before"] += 1
+                    elif "fotos_na" in key_lower:
+                        photo_counts["after"] += 1
+
                     file_counter += 1
 
         # Send Email
@@ -391,7 +745,8 @@ def submit_report():
                 report=report,
                 jobs=jobs,
                 alarms=alarms,
-                afmelding=form_data.get("afmelding", "")
+                afmelding=form_data.get("afmelding", ""),
+                photo_counts=photo_counts
             )
         except Exception as e:
             app.logger.error(f"Email failed: {str(e)}")
@@ -542,10 +897,24 @@ def read_repair_list_from_excel(share_url):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def create_email_body(report, jobs, alarms, afmelding=""):
-    """Create HTML email body with report details"""
+def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
+    """Create the original REMS email layout with the updated Job Tasks section."""
     if not report:
         return "<p>Repair Report submitted</p>"
+
+    def safe(value, fallback="N/A"):
+        if value is None or value == "":
+            return fallback
+        return html.escape(str(value))
+
+    def qty(value):
+        if value is None or value == "":
+            return "N/A"
+        try:
+            number = float(value)
+            return str(int(number)) if number.is_integer() else str(number)
+        except (TypeError, ValueError):
+            return safe(value)
 
     afmelding_value = (afmelding or "").strip()
     if afmelding_value.lower() == "nee":
@@ -554,8 +923,8 @@ def create_email_body(report, jobs, alarms, afmelding=""):
         afmelding_display = '<span style="color:#168a2e;font-weight:bold;">JA</span>'
     else:
         afmelding_display = "N/A"
-    
-    html = f"""
+
+    html_body = f"""
     <html>
     <head>
         <style>
@@ -568,122 +937,147 @@ def create_email_body(report, jobs, alarms, afmelding=""):
         </style>
     </head>
     <body>
-        <h2>Repair Report for Container: {report.container_number}</h2>
-        
+        <h2>Repair Report for Container: {safe(report.container_number)}</h2>
+
         <div class="section">
             <div class="section-title">General Information</div>
             <table>
-                <tr><th>Container Number</th><td>{report.container_number}</td></tr>
-                <tr><th>Date</th><td>{report.report_date}</td></tr>
-                <tr><th>Technician</th><td>{report.technician_name}</td></tr>
-                <tr><th>Model</th><td>{report.model or 'N/A'}</td></tr>
-                <tr><th>Serial Number</th><td>{report.serial_number or 'N/A'}</td></tr>
-                <tr><th>Warranty ID</th><td>{report.warranty_id or 'N/A'}</td></tr>
-                <tr><th>Warranty Status</th><td>{report.warranty_status or 'N/A'}</td></tr>
+                <tr><th>Container Number</th><td>{safe(report.container_number)}</td></tr>
+                <tr><th>Date</th><td>{safe(report.report_date)}</td></tr>
+                <tr><th>Technician</th><td>{safe(report.technician_name)}</td></tr>
+                <tr><th>Model</th><td>{safe(report.model)}</td></tr>
+                <tr><th>Serial Number</th><td>{safe(report.serial_number)}</td></tr>
+                <tr><th>Warranty ID</th><td>{safe(report.warranty_id)}</td></tr>
+                <tr><th>Warranty Status</th><td>{safe(report.warranty_status)}</td></tr>
             </table>
         </div>
-        
+
         <div class="section">
             <div class="section-title">Settings and Readings</div>
             <table>
-                <tr><th>Setpoint</th><td>{report.setpoint or 'N/A'} °C</td></tr>
-                <tr><th>Vents</th><td>{report.vents or 'N/A'}</td></tr>
-                <tr><th>Humidity</th><td>{report.humidity or 'N/A'}</td></tr>
-                <tr><th>Ambient</th><td>{report.ambient_temp or 'N/A'} °C</td></tr>
-                <tr><th>Supply Temp Before</th><td>{report.supply_temp_before or 'N/A'} °C</td></tr>
-                <tr><th>Supply Temp After</th><td>{report.supply_temp_after or 'N/A'} °C</td></tr>
-                <tr><th>Return Temp Before</th><td>{report.return_temp_before or 'N/A'} °C</td></tr>
-                <tr><th>Return Temp After</th><td>{report.return_temp_after or 'N/A'} °C</td></tr>
-                <tr><th>Temperature In Range</th><td>{report.temp_in_range or 'N/A'}</td></tr>
+                <tr><th>Setpoint</th><td>{safe(report.setpoint)} °C</td></tr>
+                <tr><th>Vents</th><td>{safe(report.vents)}</td></tr>
+                <tr><th>Humidity</th><td>{safe(report.humidity)}</td></tr>
+                <tr><th>Ambient</th><td>{safe(report.ambient_temp)} °C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{safe(report.supply_temp_before)} °C</td></tr>
+                <tr><th>Supply Temp After</th><td>{safe(report.supply_temp_after)} °C</td></tr>
+                <tr><th>Return Temp Before</th><td>{safe(report.return_temp_before)} °C</td></tr>
+                <tr><th>Return Temp After</th><td>{safe(report.return_temp_after)} °C</td></tr>
+                <tr><th>Temperature In Range</th><td>{safe(report.temp_in_range)}</td></tr>
                 <tr><th>Afmelding</th><td>{afmelding_display}</td></tr>
             </table>
         </div>
-        
+
         <div class="section">
             <div class="section-title">Problem Description</div>
-            <p>{report.problem_description or 'N/A'}</p>
+            <p>{safe(report.problem_description)}</p>
         </div>
-        
+
         <div class="section">
             <div class="section-title">Comments</div>
-            <p>{report.comments or 'N/A'}</p>
+            <p>{safe(report.comments)}</p>
         </div>
     """
-    
-    # Add jobs section if available
+
+    # Updated Job Tasks section only.
     if jobs:
-        html += """
+        html_body += """
         <div class="section">
             <div class="section-title">Job Tasks</div>
             <table>
                 <tr>
                     <th>Job Code</th>
                     <th>Description</th>
-                    <th>Part Number</th>
-                    <th>Part Description</th>
+                    <th>Used Part / Bottle</th>
                     <th>Quantity</th>
-                    <th>Damage Type</th>
                     <th>Old Serial</th>
                     <th>New Serial</th>
                     <th>Labor Hours</th>
                 </tr>
         """
-        
+
+        total_labor = 0.0
+
         for job in jobs:
-            html += f"""
+            code = (job.job_code or "").strip().upper()
+
+            try:
+                total_labor += float(job.labor_hours or 0)
+            except (TypeError, ValueError):
+                pass
+
+            if code == "E001II":
+                used_part = f"Bottle nr: {safe(job.bottle_number)}"
+                old_serial = "—"
+                new_serial = "—"
+            else:
+                part_number = safe(job.part_number, "")
+                part_description = safe(job.part_description, "")
+                if part_number and part_description:
+                    used_part = f"{part_number}<br>{part_description}"
+                else:
+                    used_part = part_number or part_description or "N/A"
+                old_serial = safe(job.old_serial, "—")
+                new_serial = safe(job.new_serial, "—")
+
+            html_body += f"""
                 <tr>
-                    <td>{job.job_code or 'N/A'}</td>
-                    <td>{job.description or 'N/A'}</td>
-                    <td>{job.part_number or 'N/A'}</td>
-                    <td>{job.part_description or 'N/A'}</td>
-                    <td>{job.quantity or 'N/A'}</td>
-                    <td>{job.damage_type or 'N/A'}</td>
-                    <td>{job.old_serial or 'N/A'}</td>
-                    <td>{job.new_serial or 'N/A'}</td>
-                    <td>{job.labor_hours or 'N/A'}</td>
+                    <td>{safe(job.job_code)}</td>
+                    <td>{safe(job.description)}</td>
+                    <td>{used_part}</td>
+                    <td>{qty(job.quantity)}</td>
+                    <td>{old_serial}</td>
+                    <td>{new_serial}</td>
+                    <td>{qty(job.labor_hours)}</td>
                 </tr>
             """
-        
-        html += "</table></div>"
-    
-    # Add alarms section if available
+
+        html_body += f"""
+                <tr>
+                    <td colspan="6" style="text-align:right;font-weight:bold;">Total Labor</td>
+                    <td style="font-weight:bold;">{qty(round(total_labor, 2))}</td>
+                </tr>
+            </table>
+        </div>
+        """
+
     if alarms:
-        html += """
+        html_body += """
         <div class="section">
             <div class="section-title">Alarms</div>
             <ul>
         """
-        
+
         for alarm in alarms:
-            html += f"<li>{alarm.alarm_code or 'N/A'}</li>"
-        
-        html += "</ul></div>"
-    
-    html += """
+            html_body += f"<li>{safe(alarm.alarm_code)}</li>"
+
+        html_body += "</ul></div>"
+
+    html_body += """
         <div class="section">
             <p>This report was automatically generated by the REMS system.</p>
         </div>
     </body>
     </html>
     """
-    
-    return html
 
-def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding=""):
+    return html_body
+
+
+def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding="", photo_counts=None):
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = os.environ.get('EMAIL_USER')
     SMTP_PASSWORD = os.environ.get('EMAIL_PASS')
     EMAIL_FROM = os.environ.get('EMAIL_FROM', SMTP_USERNAME)
-    EMAIL_TO = os.environ.get("EMAIL_TO", "").split(",")
+    EMAIL_TO = [address.strip() for address in os.environ.get("EMAIL_TO", "").split(",") if address.strip()]
 
     msg = MIMEMultipart()
     msg['From'] = EMAIL_FROM
     msg['To'] = ', '.join(EMAIL_TO)
     msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
-    
-    # Create HTML email body with report data
-    html_content = create_email_body(report, jobs, alarms, afmelding)
+
+    html_content = create_email_body(report, jobs, alarms, afmelding, photo_counts)
     msg.attach(MIMEText(html_content, 'html'))
 
     for filepath in attachments:
@@ -705,6 +1099,7 @@ def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, 
         smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
         smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
         app.logger.info(f"Email sent to: {EMAIL_TO}")
+
 
 def send_repair_zone_email(container_number, technician_name, current_position):
     smtp_server = 'smtp.gmail.com'
@@ -756,4 +1151,3 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-

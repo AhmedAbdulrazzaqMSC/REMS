@@ -186,8 +186,58 @@
     .cancel-action { border:1px solid #aaa; background:white; color:#444; }
     #repairZonePosition { width:100%; box-sizing:border-box; margin:6px 0 18px; padding:10px; border:1px solid #aaa; border-radius:5px; font-size:16px; text-transform:uppercase; }
     #repairZoneError { display:none; margin:0 0 14px; color:#b00020; }
+
+    /* Editable Job / Part autocomplete */
+    .autocomplete-wrap { position: relative; margin-bottom: 14px; }
+    .autocomplete-wrap input.autocomplete-input {
+      width: 100%; height: 38px; margin: 0; padding: 8px 10px;
+      border: 1px solid #aaa; border-radius: 4px; background: #fff;
+    }
+    .autocomplete-results {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px);
+      z-index: 5000; max-height: 260px; overflow-y: auto;
+      background: #fff; border: 1px solid #aaa; border-radius: 4px;
+      box-shadow: 0 5px 14px rgba(0,0,0,.14);
+    }
+    .autocomplete-results.open { display: block; }
+    .autocomplete-item {
+      padding: 9px 10px; cursor: pointer; border-bottom: 1px solid #eee;
+      font-size: 14px; line-height: 1.3;
+    }
+    .autocomplete-item:last-child { border-bottom: 0; }
+    .autocomplete-item:hover, .autocomplete-item.active { background: #eef6ff; }
+    .autocomplete-empty { padding: 9px 10px; color: #666; font-size: 13px; }
+    .job-section { overflow: visible; }
+
+
+    /* Clean mobile photo picker */
+    .photo-section .photo-container {
+      display: block;
+      margin: 12px 0 18px;
+    }
+    .photo-section .photo-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 1px solid #d8d8d8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .photo-section .photo-input::file-selector-button {
+      border: 0;
+      border-radius: 7px;
+      padding: 10px 16px;
+      margin-right: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .photo-selection-count {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #666;
+    }
+
 </style>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
 <header>
@@ -220,7 +270,17 @@
 <label for="containernr">CONTAINERNR</label><input id="containernr" name="containernr" oninput="this.value = this.value.toUpperCase()" pattern="^[A-Z]{4}[0-9]{7}$" required="" title="Must be 4 letters followed by 7 digits (e.g., MSDU9823150)" type="text"/>
 <label for="datum">DATUM (Date)</label><input id="datum" name="datum" required="" type="date">
 <label for="naam">NAAM (Technician Name)</label><input id="naam" name="naam" readonly="" required="" type="text"/>
-<label for="model">MODEL</label><input id="model" name="model" required="" type="text"/>
+<label for="model">MODEL NR</label><input id="model" name="model" required="" type="text"/>
+<label for="model_family">MODEL FAMILY</label>
+<select id="model_family" name="model_family" required>
+  <option value="">Select model family</option>
+  <option value="PrimeLine">PrimeLine</option>
+  <option value="OptimaLine">OptimaLine</option>
+  <option value="StarCool">StarCool</option>
+  <option value="ThinLINE">ThinLINE</option>
+  <option value="EliteLINE">EliteLINE</option>
+  <option value="NaturaLINE">NaturaLINE</option>
+</select>
 <label for="serienr">SERIENR.</label><input id="serienr" name="serienr" required="" type="text"/>
 <label for="warranty_id">WARRANTY ID NR</label><input id="warranty_id" name="warranty_id" required="" type="text"/>
 <label for="garantie">GARANTIE</label><input id="garantie" name="garantie" required="" type="text"/>
@@ -248,25 +308,23 @@
   <label>Fotos VOOR</label>
   <div id="fotos_voor">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
       <img class="photo-preview">
       <div class="compression-info"></div>
+    
     </div>
   </div>
-  <button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
 </div>
 <div class="photo-section">
   <label>Fotos NA</label>
   <div id="fotos_na">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
       <img class="photo-preview">
       <div class="compression-info"></div>
+    
     </div>
   </div>
-  <button class="add-button" onclick="addPhoto('fotos_na')" type="button">Add More After Photos</button>
 </div>
 </fieldset>
 </div>
@@ -327,51 +385,7 @@
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-const jobData = [
-  { code: "A011A", part: "38-00557-00", description: "Fan, Evaporator", hours: 0.5 },
-  { code: "A018A", part: "12-56012", description: "Controller ML3, Green Label, Repaired", hours: 1.0 },
-  { code: "A037A", part: "76-66694-00", description: "Sensor, Humidity W/Bracket (HS)", hours: 1.25 },
-  { code: "B075A", part: "81-04203-25", description: "Condenser Coil (ALU/ALU)", hours: 4.0 },
-  { code: "B075A", part: "69NT43-202-20PK5", description: "Condenser Coil, 4-Row", hours: 4.0 },
-  { code: "B075A", part: "81-04203-21", description: "Condenser Coil, Assembly (excl all related jobs)", hours: 4.0 },
-  { code: "B064A", part: "18-10129-22", description: "COMPRESSOR, THINLINE", hours: 3.25 },
-  { code: "A030A", part: "54-00742-00", description: "Motor, evaporator", hours: 2.0 },
-  { code: "B064A", part: "18-10178-22", description: "COMPRESSOR SCROLL PRIMELINE", hours: 2.0 },
-  { code: "A005A", part: "22-50088-02", description: "Capacitor, CFM, 15uF", hours: 1.5 },
-  { code: "A005A", part: "22-50088-00", description: "Capacitor, EF, 20uF (High Speed)", hours: 1.5 },
-  { code: "A037A", part: "76-66694-00", description: "Sensor, Humidity W/Bracket  (HS)", hours: 1.25 },
-  { code: "A018A", part: "12-56009", description: "Controller ML3, Yellow Label, Repaired", hours: 1.0 },
-  { code: "A018A", part: "12-56012", description: "Controller ML3, Green Label, Repaired", hours: 1.0 },
-  { code: "A008A", part: "66U1-7842-13", description: "Breaker, Circuit - 460 vac, 25 Amp, (CB1)", hours: 1.0 },
-  { code: "B069A", part: "76-50210-00", description: "Kit, Compressor Terminal Wiring (Single Voltage)", hours: 1.0 },
-  { code: "A013A", part: "10-00431-07", description: "Contactor, 30A", hours: 0.75 },
-  { code: "A058A", part: "12-00395-01SV", description: "Sensor, Supply, Assembly (SRS & STS)", hours: 0.75 },
-  { code: "B074A", part: "07-00292-00", description: "SW20 Compressor Oil, Castrol Icematic (Quart) (1 liter)", hours: 0.5 },
-  { code: "B087A", part: "14-00464-20", description: "Filter Drier, with O-Rings", hours: 0.5 },
-  { code: "B094A", part: "12-00309-06", description: "Switch, High Pressure (HPS)", hours: 0.5 },
-  { code: "A002A", part: "22-66651-20", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A002X", part: "22-50463-00PK50", description: "SPLICE KIT FAST III", hours: 0.5 },
-  { code: "A002X", part: "22-50463-00PK5", description: "SPLICE KIT FAST III", hours: 0.5 },
-  { code: "A002A", part: "22-66654-20", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A001A", part: "22-02378-00PK10", description: "Plug, Power", hours: 0.5 },
-  { code: "A028A", part: "10-00439-00", description: "Transformer, Current Sensing (CS)", hours: 0.5 },
-  { code: "A053A", part: "12-00495-02SV", description: "Sensor, Ambient / Defrost kit (AMBS / DTS)", hours: 0.5 },
-  { code: "A001A", part: "818559A", description: "Power plug", hours: 0.5 },
-  { code: "A002A", part: "818831A", description: "Cable MSC ContainerFlex FG7OK 4G4 11awg (per meter)", hours: 0.5 },
-  { code: "A002X", part: "818260A", description: "Splice kit, AKS to NSK", hours: 0.5 },
-  { code: "A011A", part: "38-00557-00", description: "Fan, Evaporator", hours: 0.5 },
-  { code: "A051A", part: "12-00495-02SV", description: "Sensor, Ambient / Defrost kit (AMBS / DTS)", hours: 0.5 },
-  { code: "A028A", part: "10-00439-02", description: "Transformer, Current Sensing (CS)", hours: 0.5 },
-  { code: "A039A", part: "79-66669-05", description: "Keypad Assy", hours: 0.5 },
-  { code: "A029A", part: "12-00433-00RB", description: "Module, Display (Repaired)", hours: 0.5 },
-  { code: "A039A", part: "79-66669-04", description: "Keypad, Assembly", hours: 0.5 },
-  { code: "A034A", part: "22-02336-08", description: "Fuse, 7.5 Amp", hours: 0.25 },
-  { code: "A041A", part: "30-50377-00", description: "Controller/DataCORDER Module Standard Battery Holder with Connector", hours: 0.25 },
-  { code: "B123A", part: "14-00353-20", description: "Piston and Motor Assembly", hours: 0.25 },
-  { code: "B110A", part: "17-10811-05", description: "Gasket, Service Valve (2 Bolt) (excl all related jobs)", hours: 0.25 }
-];
 let selectedContainerNumber = '';
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -620,81 +634,322 @@ function addJob() {
   const fieldset = document.createElement("fieldset");
   fieldset.classList.add("job-section");
 
-  let options = "";
-  jobData.forEach(j => {
-    options += `<option value="${j.code}">${j.description}</option>`;
-  });
-
   fieldset.innerHTML = `
     <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
-    <label>Job Description</label>
-    <select name="job_description[]" class="job-select" onchange="fillJobData(this)">
-      <option value="">Select</option>
-      ${options}
-    </select>
-    <label>Job Code</label>
-    <input type="text" name="job_code[]" readonly>
-    <label>Part Number</label>
-    <input type="text" name="part_number[]">
-    <label>Part Description</label>
-    <input type="text" name="part_description[]" readonly>
-    <label>Quantity</label>
-    <input type="number" name="quantity[]">
-    <label>Damage Type</label>
-    <select name="damage_type[]">
-      <option value="">Select</option>
-      <option value="BK">BK - Blocked</option>
-      <option value="BL">BL - Blowout</option>
-      <option value="BN">BN - Burned</option>
-      <option value="BR">BR - Broken/Split</option>
-      <option value="CO">CO - Corroded/Rusty</option>
-      <option value="CT">CT - Contaminated</option>
-      <option value="CU">CU - Cut</option>
-      <option value="CW">CW - Cracked weld</option>
-      <option value="DT">DT - Dent</option>
-      <option value="DY">DY - Dirty</option>
-      <option value="IR">IR - Improper Repair</option>
-      <option value="LF">LF - Low Fluid Level</option>
-      <option value="LK">LK - Leak</option>
-      <option value="LO">LO - Loose</option>
-      <option value="MS">MS - Missing/Lost</option>
-      <option value="OC">OC - Out of calibration</option>
-      <option value="OL">OL - Oil saturated</option>
-      <option value="RA">RA - Remove For Access</option>
-      <option value="RN">RN - Repair Necessary</option>
-      <option value="SH">SH - Short/Open circuit</option>
-      <option value="TR">TR - Test Required</option>
-      <option value="ZZ">ZZ - Not Applicable</option>
-    </select>
-    <label>Old Serial Number</label>
+
+    <label>Job / Repair Performed</label>
+    <div class="autocomplete-wrap">
+      <input type="text" class="autocomplete-input job-autocomplete"
+             autocomplete="off" placeholder="Type job code or repair description" required>
+      <div class="autocomplete-results"></div>
+    </div>
+    <input type="hidden" name="job_description[]">
+    <input type="hidden" name="job_code[]">
+    <input type="hidden" name="repair_type[]">
+
+    <div class="standard-job-fields">
+    <label>Used Part</label>
+    <div class="autocomplete-wrap">
+      <input type="text" class="autocomplete-input part-autocomplete"
+             autocomplete="off" placeholder="Type part number or description (optional)">
+      <div class="autocomplete-results"></div>
+    </div>
+    <input type="hidden" name="part_number[]">
+    <input type="hidden" name="part_description[]">
+
+    </div>
+    <label>Quantity <span class="quantity-note" style="font-weight:normal;color:#666"></span></label>
+    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
+
+    <div class="standard-job-details">
+    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_old[]">
-    <label>New Serial Number</label>
+
+    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_new[]">
-    <input type="hidden" name="labor_hours[]" readonly>
+
+    </div>
+    <div class="refrigerant-bottle-field" style="display:none">
+      <label>Bottle nr</label>
+      <input type="text" name="bottle_number[]" autocomplete="off">
+    </div>
+
+    <label>Labor Hours</label>
+    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
+    <small class="labor-note" style="display:block;color:#666;margin-top:-6px;margin-bottom:8px">
+      Select Model Family above to calculate Labor Hours.
+    </small>
+
+    <input type="hidden" name="damage_type[]" value="BR">
   `;
+
   container.appendChild(fieldset);
-  $(fieldset).find('.job-select').select2({ width: '100%' });
+  initializeAutocomplete(fieldset);
 }
 
-function fillJobData(selectElem) {
-  const selectedCode = selectElem.value;
-  const job = jobData.find(j => j.code === selectedCode);
-  if (!job) return;
-  const container = selectElem.closest("fieldset");
-  container.querySelector('input[name="job_code[]"]').value = job.code;
-  container.querySelector('input[name="part_number[]"]').value = job.part;
-  container.querySelector('input[name="part_description[]"]').value = job.description;
-  container.querySelector('input[name="labor_hours[]"]').value = job.hours;
-  selectElem.setAttribute("data-description", job.description);
+function updateSerialRequirements(fieldset) {
+  const partDescription =
+    fieldset.querySelector('input[name="part_description[]"]')?.value?.trim().toLowerCase() || '';
+
+  // SNs mandatory only for these component groups.
+  const serialRequired =
+    /humidity/.test(partDescription) ||
+    /\bo2\b|o²|oxygen/.test(partDescription) ||
+    /\bco2\b|co²|carbon dioxide/.test(partDescription) ||
+    (
+      /(evaporator|condenser)/.test(partDescription) &&
+      /(fan|motor)/.test(partDescription)
+    ) ||
+    /(condenser.*coil|coil.*condenser)/.test(partDescription) ||
+    /\bcompressor\b/.test(partDescription);
+
+  const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
+  const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
+  const oldLabel = oldSerial?.previousElementSibling;
+  const newLabel = newSerial?.previousElementSibling;
+
+  if (oldSerial) oldSerial.required = serialRequired;
+  if (newSerial) newSerial.required = serialRequired;
+
+  if (oldLabel) {
+    oldLabel.innerHTML = serialRequired
+      ? 'Old Serial Number <span style="color:#b00020">*</span>'
+      : 'Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
+  }
+  if (newLabel) {
+    newLabel.innerHTML = serialRequired
+      ? 'New Serial Number <span style="color:#b00020">*</span>'
+      : 'New Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
+  }
 }
+
+function applySpecialJobLayout(fieldset) {
+  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
+  const isRefrigerant = jobCode === 'E001II';
+
+  const standardPart = fieldset.querySelector('.standard-job-fields');
+  const standardDetails = fieldset.querySelector('.standard-job-details');
+  const bottleField = fieldset.querySelector('.refrigerant-bottle-field');
+  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+  const laborNote = fieldset.querySelector('.labor-note');
+
+  if (standardPart) standardPart.style.display = isRefrigerant ? 'none' : '';
+  if (standardDetails) standardDetails.style.display = isRefrigerant ? 'none' : '';
+  if (bottleField) bottleField.style.display = isRefrigerant ? '' : 'none';
+
+  if (isRefrigerant) {
+    // Refrigerant R134A Charge: only Quantity, Bottle nr and fixed Labor Hours.
+    const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
+    const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
+    if (oldSerial) oldSerial.required = false;
+    if (newSerial) newSerial.required = false;
+    fieldset.querySelector('input[name="part_number[]"]').value = '';
+    fieldset.querySelector('input[name="part_description[]"]').value = '';
+    fieldset.querySelector('input[name="serial_old[]"]').value = '';
+    fieldset.querySelector('input[name="serial_new[]"]').value = '';
+    laborInput.value = '0.5';
+    laborInput.readOnly = true;
+    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
+  } else {
+    laborInput.readOnly = false;
+    updateSerialRequirements(fieldset);
+    const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
+    if (bottle) bottle.value = '';
+  }
+}
+
+function initializeAutocomplete(fieldset) {
+  setupAutocomplete(
+    fieldset,
+    '.job-autocomplete',
+    '/api/job-codes',
+    data => {
+      fieldset.querySelector('input[name="job_code[]"]').value = data.code || data.id || '';
+      fieldset.querySelector('input[name="job_description[]"]').value = data.description || '';
+      fieldset.querySelector('input[name="repair_type[]"]').value = data.repair_type || '';
+      applySpecialJobLayout(fieldset);
+      recalculateLabor(fieldset);
+    },
+    () => {
+      fieldset.querySelector('input[name="job_code[]"]').value = '';
+      fieldset.querySelector('input[name="job_description[]"]').value = '';
+      fieldset.querySelector('input[name="repair_type[]"]').value = '';
+      applySpecialJobLayout(fieldset);
+      recalculateLabor(fieldset);
+    }
+  );
+
+  setupAutocomplete(
+    fieldset,
+    '.part-autocomplete',
+    '/api/parts',
+    data => {
+      fieldset.querySelector('input[name="part_number[]"]').value = data.part_number || data.id || '';
+      fieldset.querySelector('input[name="part_description[]"]').value = data.description || '';
+      updateSerialRequirements(fieldset);
+      recalculateLabor(fieldset);
+    },
+    () => {
+      fieldset.querySelector('input[name="part_number[]"]').value = '';
+      fieldset.querySelector('input[name="part_description[]"]').value = '';
+      fieldset.querySelector('.quantity-note').textContent = '';
+      updateSerialRequirements(fieldset);
+      recalculateLabor(fieldset);
+    }
+  );
+
+  fieldset.querySelector('input[name="quantity[]"]')
+    .addEventListener('input', () => recalculateLabor(fieldset));
+}
+
+function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
+  const input = fieldset.querySelector(selector);
+  const results = input.parentElement.querySelector('.autocomplete-results');
+  let timer = null;
+  let requestId = 0;
+
+  const close = () => {
+    results.classList.remove('open');
+    results.innerHTML = '';
+  };
+
+  input.addEventListener('input', () => {
+    // Once the technician edits selected text, the previous selection is no longer valid.
+    onClear();
+    const q = input.value.trim();
+    clearTimeout(timer);
+
+    if (!q) {
+      close();
+      return;
+    }
+
+    timer = setTimeout(async () => {
+      const thisRequest = ++requestId;
+      try {
+        const response = await fetch(`${url}?q=${encodeURIComponent(q)}`);
+        const payload = await response.json();
+        if (thisRequest !== requestId) return;
+
+        const items = Array.isArray(payload) ? payload : (payload.results || []);
+        results.innerHTML = '';
+
+        if (!items.length) {
+          results.innerHTML = '<div class="autocomplete-empty">No matching results</div>';
+          results.classList.add('open');
+          return;
+        }
+
+        items.forEach(item => {
+          const row = document.createElement('div');
+          row.className = 'autocomplete-item';
+          row.textContent = item.text || item.description || item.id || '';
+          row.addEventListener('mousedown', event => {
+            event.preventDefault();
+            input.value = item.text || item.description || item.id || '';
+            close();
+            onSelect(item);
+          });
+          results.appendChild(row);
+        });
+        results.classList.add('open');
+      } catch (err) {
+        close();
+      }
+    }, 180);
+  });
+
+  input.addEventListener('focus', () => {
+    if (input.value.trim()) input.dispatchEvent(new Event('input'));
+  });
+
+  input.addEventListener('keydown', event => {
+    if ((event.key === 'Backspace' || event.key === 'Delete') && input.value === '') {
+      onClear();
+      close();
+    }
+    if (event.key === 'Escape') close();
+  });
+
+  input.addEventListener('blur', () => setTimeout(close, 120));
+}
+
+async function recalculateLabor(fieldset) {
+  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
+  if (jobCode === 'E001II') {
+    const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+    const laborNote = fieldset.querySelector('.labor-note');
+    if (laborInput) {
+      laborInput.value = '0.5';
+      laborInput.readOnly = true;
+    }
+    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
+    return;
+  }
+
+  const model = document.getElementById('model_family')?.value?.trim() || '';
+  const partNumber = fieldset.querySelector('input[name="part_number[]"]')?.value?.trim() || '';
+  const repairCode = fieldset.querySelector('input[name="repair_type[]"]')?.value?.trim() || '';
+  const quantity = fieldset.querySelector('input[name="quantity[]"]')?.value || '1';
+  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+  const laborNote = fieldset.querySelector('.labor-note');
+  const quantityNote = fieldset.querySelector('.quantity-note');
+
+  if (!laborInput) return;
+
+  if (!model) {
+    laborInput.value = '0';
+    if (laborNote) laborNote.textContent = 'Select Model Family above to calculate Labor Hours.';
+    return;
+  }
+  if (!partNumber) {
+    laborInput.value = '0';
+    if (laborNote) laborNote.textContent = 'Select a Used Part to calculate Labor Hours.';
+    return;
+  }
+
+  if (laborNote) laborNote.textContent = 'Calculating Labor Hours...';
+
+  try {
+    const params = new URLSearchParams({
+      model,
+      part_number: partNumber,
+      repair_code: repairCode,
+      quantity
+    });
+    const response = await fetch('/api/labor-hours?' + params.toString());
+    const data = await response.json();
+
+    if (data.status === 'success') {
+      laborInput.value = Number(data.labor_hours || 0).toFixed(2).replace(/\.00$/, '');
+      if (laborNote) laborNote.textContent =
+        `Auto: ${data.first_hour} h × ${quantity} = ${data.labor_hours} h (${data.model_family})`;
+      if (quantityNote) quantityNote.textContent = data.is_cable ? '— 1 roll = 18 m' : '';
+    } else {
+      laborInput.value = '0';
+      if (laborNote) laborNote.textContent =
+        `No matching labor rule found for ${partNumber} (${model}). Enter Labor Hours manually.`;
+      if (quantityNote) quantityNote.textContent = '';
+    }
+  } catch (err) {
+    if (laborNote) laborNote.textContent =
+      'Automatic labor lookup unavailable — enter Labor Hours manually.';
+  }
+}
+
+['input', 'change'].forEach(eventName => {
+  document.getElementById('model_family')?.addEventListener(eventName, () => {
+    document.querySelectorAll('.job-section').forEach(section => recalculateLabor(section));
+  });
+});
 
 function addPhoto(sectionId) {
   const container = document.getElementById(sectionId);
   const photoCount = container.querySelectorAll('input[type="file"]').length;
   
-  // Limit to 2 photos per section (2 before + 2 after = 4 total)
-  if (photoCount >= 2) {
-    alert("Maximum 2 photos allowed per section (4 total)");
+  // Allow up to 10 photos per section.
+  if (photoCount >= 10) {
+    alert("Maximum 10 photos allowed per section");
     return;
   }
 
@@ -715,34 +970,47 @@ function removePhoto(button) {
 }
 
 function handleImageUpload(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const files = Array.from(input.files || []);
+
+  if (files.length > 10) {
+    alert("Maximum 10 photos allowed");
+    input.value = "";
+    updatePhotoSelectionLabel(input);
+    return;
+  }
+
+  updatePhotoSelectionLabel(input);
 
   const container = input.closest('.photo-container');
-  const preview = container.querySelector('.photo-preview');
-  const info = container.querySelector('.compression-info');
-  
-  // Show original file info
-  info.textContent = `Original: ${formatFileSize(file.size)}`;
-  
-  // Show preview of original image
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    preview.src = e.target.result;
-    preview.style.display = 'block';
-    
-    // Compress the image
-    compressImage(file, function(compressedFile, originalSize) {
-      // Replace the file input with the compressed version
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(compressedFile);
-      input.files = dataTransfer.files;
-      
-      // Update compression info
-      info.textContent += ` → Compressed: ${formatFileSize(compressedFile.size)} (${Math.round((compressedFile.size / originalSize) * 100)}%)`;
-    });
-  };
-  reader.readAsDataURL(file);
+  const preview = container?.querySelector('.photo-preview');
+  if (preview) {
+    if (files.length === 1) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(files[0]);
+    } else {
+      preview.removeAttribute('src');
+      preview.style.display = 'none';
+    }
+  }
+}
+
+function updatePhotoSelectionLabel(input) {
+  const container = input.closest('.photo-container');
+  if (!container) return;
+
+  let label = container.querySelector('.photo-selection-count');
+  if (!label) {
+    label = document.createElement('div');
+    label.className = 'photo-selection-count';
+    container.appendChild(label);
+  }
+
+  const count = input.files ? input.files.length : 0;
+  label.textContent = count ? `${count} photo${count === 1 ? '' : 's'} selected` : 'Select 2–10 photos';
 }
 
 function compressImage(file, callback) {
@@ -774,7 +1042,12 @@ function compressImage(file, callback) {
       
       // Convert to compressed JPEG
       canvas.toBlob(function(blob) {
-        const compressedFile = new File([blob], file.name, {
+        if (!blob) {
+          callback(file, file.size);
+          return;
+        }
+        const originalBaseName = (file.name || 'photo').replace(/\.[^.]+$/, '');
+        const compressedFile = new File([blob], `${originalBaseName}.jpg`, {
           type: 'image/jpeg',
           lastModified: Date.now()
         });
@@ -784,6 +1057,14 @@ function compressImage(file, callback) {
     img.src = event.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+function compressImagePromise(file) {
+  return new Promise((resolve) => {
+    compressImage(file, (compressedFile, originalSize) => {
+      resolve({ compressedFile, originalSize });
+    });
+  });
 }
 
 function formatFileSize(bytes) {
@@ -811,55 +1092,29 @@ function removeAlarm(button) {
 function addUndefinedJob() {
   const container = document.querySelector("#jobContainer fieldset");
   const fieldset = document.createElement("fieldset");
-  fieldset.classList.add("job-section");  
+  fieldset.classList.add("job-section");
 
   fieldset.innerHTML = `
     <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
     <label>Job Description</label>
-    <input type="text" name="job_description[]">
+    <input type="text" name="job_description[]" required placeholder="Describe the repair performed">
     <label>Job Code</label>
-    <input type="text" name="job_code[]">
+    <input type="text" name="job_code[]" placeholder="Optional">
     <label>Part Number</label>
-    <input type="text" name="part_number[]">
+    <input type="text" name="part_number[]" placeholder="Optional">
     <label>Part Description</label>
-    <input type="text" name="part_description[]">
+    <input type="text" name="part_description[]" placeholder="Optional">
     <label>Quantity</label>
-    <input type="number" name="quantity[]">
-    <label>Damage Type</label>
-    <select name="damage_type[]">
-      <option value="">Select</option>
-      <option value="BK">BK - Blocked</option>
-      <option value="BL">BL - Blowout</option>
-      <option value="BN">BN - Burned</option>
-      <option value="BR">BR - Broken/Split</option>
-      <option value="CO">CO - Corroded/Rusty</option>
-      <option value="CT">CT - Contaminated</option>
-      <option value="CU">CU - Cut</option>
-      <option value="CW">CW - Cracked weld</option>
-      <option value="DT">DT - Dent</option>
-      <option value="DY">DY - Dirty</option>
-      <option value="IR">IR - Improper Repair</option>
-      <option value="LF">LF - Low Fluid Level</option>
-      <option value="LK">LK - Leak</option>
-      <option value="LO">LO - Loose</option>
-      <option value="MS">MS - Missing/Lost</option>
-      <option value="OC">OC - Out of calibration</option>
-      <option value="OL">OL - Oil saturated</option>
-      <option value="RA">RA - Remove For Access</option>
-      <option value="RN">RN - Repair Necessary</option>
-      <option value="SH">SH - Short/Open circuit</option>
-      <option value="TR">TR - Test Required</option>
-      <option value="ZZ">ZZ - Not Applicable</option>
-    </select>
-    <label>Old Serial Number</label>
+    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
+    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_old[]">
-    <label>New Serial Number</label>
+    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
     <input type="text" name="serial_new[]">
     <label>Labor Hours</label>
-    <input type="text" name="labor_hours[]">
+    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
+    <input type="hidden" name="damage_type[]" value="BR">
   `;
   container.appendChild(fieldset);
-  $(fieldset).find('.job-select').select2({ width: '100%' });
 }
 
 function removeJob(button) {
@@ -880,13 +1135,19 @@ async function submitRepair(event) {
   submitButton.innerHTML = '<span class="spinner"></span> Processing...';
 
   try {
-    // Check photo limits
-    const beforePhotos = document.querySelectorAll('#fotos_voor input[type="file"]');
-    const afterPhotos = document.querySelectorAll('#fotos_na input[type="file"]');
-    
-    if (beforePhotos.length + afterPhotos.length > 4) {
-      alert("Maximum 4 photos allowed (2 before + 2 after)");
-      throw new Error("Too many photos");
+    // Require 2–10 actual files BEFORE and 2–10 actual files AFTER.
+    const beforeInputs = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'));
+    const afterInputs = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'));
+    const beforeCount = beforeInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
+    const afterCount = afterInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
+
+    if (beforeCount < 2 || beforeCount > 10) {
+      alert("Please select minimum 2 and maximum 10 Before photos");
+      throw new Error("Invalid before photo count");
+    }
+    if (afterCount < 2 || afterCount > 10) {
+      alert("Please select minimum 2 and maximum 10 After photos");
+      throw new Error("Invalid after photo count");
     }
 
     // Validate temperature inputs
@@ -913,6 +1174,41 @@ async function submitRepair(event) {
 
     const form = document.getElementById("repairForm");
     const formData = new FormData(form);
+
+    // Remove the original full-resolution photo files that FormData(form)
+    // added automatically. We append compressed versions below instead.
+    const photoKeys = [];
+    for (const [key] of formData.entries()) {
+      if (key.startsWith('fotos_voor') || key.startsWith('fotos_na')) {
+        if (!photoKeys.includes(key)) photoKeys.push(key);
+      }
+    }
+    photoKeys.forEach(key => formData.delete(key));
+
+    const beforeFiles = beforeInputs.flatMap(input => Array.from(input.files || []));
+    const afterFiles = afterInputs.flatMap(input => Array.from(input.files || []));
+    const totalPhotos = beforeFiles.length + afterFiles.length;
+    let processedPhotos = 0;
+
+    async function compressAndAppend(filesToProcess, formKey) {
+      for (const file of filesToProcess) {
+        processedPhotos += 1;
+        submitButton.innerHTML =
+          `<span class="spinner"></span> Compressing photos ${processedPhotos}/${totalPhotos}...`;
+
+        const { compressedFile, originalSize } = await compressImagePromise(file);
+        formData.append(formKey, compressedFile, compressedFile.name);
+
+        console.log(
+          `Compressed ${file.name}: ${formatFileSize(originalSize)} → ${formatFileSize(compressedFile.size)}`
+        );
+      }
+    }
+
+    await compressAndAppend(beforeFiles, 'fotos_voor');
+    await compressAndAppend(afterFiles, 'fotos_na');
+
+    submitButton.innerHTML = '<span class="spinner"></span> Uploading report...';
 
     formData.append("containernr", form.containernr.value);
     formData.append("naam", form.naam.value);
@@ -947,6 +1243,8 @@ async function submitRepair(event) {
       formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
       formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
       formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
+      const bottleInput = section.querySelector("[name='bottle_number[]']");
+      formData.append(`job[${index}][bottle_number]`, bottleInput ? bottleInput.value : "");
       formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
       formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
     });
@@ -958,6 +1256,8 @@ async function submitRepair(event) {
     alarmValues.forEach((value) => {
       formData.append('alarm[]', value);
     });
+
+    submitButton.innerHTML = '<span class="spinner"></span> Sending report...';
 
     const response = await fetch('/api/submit', {
       method: "POST",
@@ -978,7 +1278,7 @@ async function submitRepair(event) {
       alert("❌ Error submitting report: " + result.message);
     }
   } catch (error) {
-    if (error.message !== "Too many photos" && error.message !== "Invalid temperature values") {
+    if (error.message !== "Invalid before photo count" && error.message !== "Invalid after photo count" && error.message !== "Invalid temperature values") {
       alert("❌ Network error: " + error.message);
     }
   } finally {
