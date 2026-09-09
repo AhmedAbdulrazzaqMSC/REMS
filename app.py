@@ -120,10 +120,10 @@ class LaborRuleMaster(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     model_family = db.Column(db.String(50), nullable=False, index=True)
     part_number = db.Column(db.String(100), nullable=False, index=True)
-    part_description = db.Column(db.String(500))
+    part_description = db.Column(db.Text)
     damage_code = db.Column(db.String(50), index=True)
     repair_code = db.Column(db.String(50), index=True)
-    repair_description = db.Column(db.String(255))
+    repair_description = db.Column(db.Text)
     first_hour = db.Column(db.Float, nullable=False, default=0)
 
 class Alarm(db.Model):
@@ -304,8 +304,28 @@ def seed_master_data():
                 description = val(row, 'Part_Description')
                 damage_code = val(row, 'DamageCode').upper()
                 repair_code = val(row, 'RepairCode').upper()
+                repair_description = val(row, 'Repair_description')
+
                 if not part_number:
                     continue
+
+                # Reject malformed workbook rows instead of letting corrupted cell
+                # contents break PostgreSQL during application startup.
+                if len(part_number) > 100:
+                    app.logger.warning(
+                        "Skipping malformed part number in %s: length=%s, starts_with=%r",
+                        filename, len(part_number), part_number[:80]
+                    )
+                    continue
+                if len(damage_code) > 50 or len(repair_code) > 50:
+                    app.logger.warning(
+                        "Skipping malformed labor rule in %s for part %s",
+                        filename, part_number
+                    )
+                    continue
+
+                description = description[:5000]
+                repair_description = repair_description[:5000]
                 if part_number not in existing_parts:
                     db.session.add(SparePartMaster(
                         part_number=part_number, replaced_by='', description=description, max_qty=''
@@ -325,7 +345,7 @@ def seed_master_data():
                         part_description=description,
                         damage_code=damage_code,
                         repair_code=repair_code,
-                        repair_description=val(row, 'Repair_description'),
+                        repair_description=repair_description,
                         first_hour=first_hour
                     ))
                     existing_rules.add(rule_key)
@@ -345,6 +365,18 @@ with app.app_context():
             db.session.commit()
         except Exception:
             db.session.rollback()
+
+        # Upgrade description columns on an existing REMS database before seeding.
+        try:
+            db.session.execute(text(
+                "ALTER TABLE labor_rule_master "
+                "ALTER COLUMN part_description TYPE TEXT, "
+                "ALTER COLUMN repair_description TYPE TEXT"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
         seed_master_data()
         db.session.execute(text("SELECT 1"))
         app.logger.info("Database initialized successfully")
@@ -1054,4 +1086,3 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
