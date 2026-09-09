@@ -661,6 +661,41 @@ function addJob() {
   initializeAutocomplete(fieldset);
 }
 
+function updateSerialRequirements(fieldset) {
+  const partDescription =
+    fieldset.querySelector('input[name="part_description[]"]')?.value?.trim().toLowerCase() || '';
+
+  // SNs mandatory only for these component groups.
+  const serialRequired =
+    /humidity/.test(partDescription) ||
+    /\bo2\b|o²|oxygen/.test(partDescription) ||
+    /\bco2\b|co²|carbon dioxide/.test(partDescription) ||
+    (
+      /(evaporator|condenser)/.test(partDescription) &&
+      /(fan|motor)/.test(partDescription)
+    ) ||
+    /(condenser.*coil|coil.*condenser)/.test(partDescription);
+
+  const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
+  const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
+  const oldLabel = oldSerial?.previousElementSibling;
+  const newLabel = newSerial?.previousElementSibling;
+
+  if (oldSerial) oldSerial.required = serialRequired;
+  if (newSerial) newSerial.required = serialRequired;
+
+  if (oldLabel) {
+    oldLabel.innerHTML = serialRequired
+      ? 'Old Serial Number <span style="color:#b00020">*</span>'
+      : 'Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
+  }
+  if (newLabel) {
+    newLabel.innerHTML = serialRequired
+      ? 'New Serial Number <span style="color:#b00020">*</span>'
+      : 'New Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
+  }
+}
+
 function applySpecialJobLayout(fieldset) {
   const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
   const isRefrigerant = jobCode === 'E001II';
@@ -677,6 +712,10 @@ function applySpecialJobLayout(fieldset) {
 
   if (isRefrigerant) {
     // Refrigerant R134A Charge: only Quantity, Bottle nr and fixed Labor Hours.
+    const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
+    const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
+    if (oldSerial) oldSerial.required = false;
+    if (newSerial) newSerial.required = false;
     fieldset.querySelector('input[name="part_number[]"]').value = '';
     fieldset.querySelector('input[name="part_description[]"]').value = '';
     fieldset.querySelector('input[name="serial_old[]"]').value = '';
@@ -686,6 +725,7 @@ function applySpecialJobLayout(fieldset) {
     if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
   } else {
     laborInput.readOnly = false;
+    updateSerialRequirements(fieldset);
     const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
     if (bottle) bottle.value = '';
   }
@@ -719,12 +759,14 @@ function initializeAutocomplete(fieldset) {
     data => {
       fieldset.querySelector('input[name="part_number[]"]').value = data.part_number || data.id || '';
       fieldset.querySelector('input[name="part_description[]"]').value = data.description || '';
+      updateSerialRequirements(fieldset);
       recalculateLabor(fieldset);
     },
     () => {
       fieldset.querySelector('input[name="part_number[]"]').value = '';
       fieldset.querySelector('input[name="part_description[]"]').value = '';
       fieldset.querySelector('.quantity-note').textContent = '';
+      updateSerialRequirements(fieldset);
       recalculateLabor(fieldset);
     }
   );
