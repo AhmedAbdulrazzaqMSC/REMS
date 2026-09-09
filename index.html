@@ -209,6 +209,34 @@
     .autocomplete-empty { padding: 9px 10px; color: #666; font-size: 13px; }
     .job-section { overflow: visible; }
 
+
+    /* Clean mobile photo picker */
+    .photo-section .photo-container {
+      display: block;
+      margin: 12px 0 18px;
+    }
+    .photo-section .photo-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 1px solid #d8d8d8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .photo-section .photo-input::file-selector-button {
+      border: 0;
+      border-radius: 7px;
+      padding: 10px 16px;
+      margin-right: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .photo-selection-count {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #666;
+    }
+
 </style>
 </head>
 <body>
@@ -280,35 +308,23 @@
   <label>Fotos VOOR</label>
   <div id="fotos_voor">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
       <img class="photo-preview">
       <div class="compression-info"></div>
-    <div class="photo-container">
-      <input class="photo-input" name="fotos_voor_extra" type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
-      <img class="photo-preview">
-      <div class="compression-info"></div>
+    
     </div>
   </div>
-  <button class="add-button" onclick="addPhoto('fotos_voor')" type="button">Add More Before Photos</button>
 </div>
 <div class="photo-section">
   <label>Fotos NA</label>
   <div id="fotos_na">
     <div class="photo-container">
-      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
+      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
       <img class="photo-preview">
       <div class="compression-info"></div>
-    <div class="photo-container">
-      <input class="photo-input" name="fotos_na_extra" type="file" accept="image/*" onchange="handleImageUpload(this)">
-      <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
-      <img class="photo-preview">
-      <div class="compression-info"></div>
+    
     </div>
   </div>
-  <button class="add-button" onclick="addPhoto('fotos_na')" type="button">Add More After Photos</button>
 </div>
 </fieldset>
 </div>
@@ -953,34 +969,47 @@ function removePhoto(button) {
 }
 
 function handleImageUpload(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const files = Array.from(input.files || []);
+
+  if (files.length > 10) {
+    alert("Maximum 10 photos allowed");
+    input.value = "";
+    updatePhotoSelectionLabel(input);
+    return;
+  }
+
+  updatePhotoSelectionLabel(input);
 
   const container = input.closest('.photo-container');
-  const preview = container.querySelector('.photo-preview');
-  const info = container.querySelector('.compression-info');
-  
-  // Show original file info
-  info.textContent = `Original: ${formatFileSize(file.size)}`;
-  
-  // Show preview of original image
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    preview.src = e.target.result;
-    preview.style.display = 'block';
-    
-    // Compress the image
-    compressImage(file, function(compressedFile, originalSize) {
-      // Replace the file input with the compressed version
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(compressedFile);
-      input.files = dataTransfer.files;
-      
-      // Update compression info
-      info.textContent += ` → Compressed: ${formatFileSize(compressedFile.size)} (${Math.round((compressedFile.size / originalSize) * 100)}%)`;
-    });
-  };
-  reader.readAsDataURL(file);
+  const preview = container?.querySelector('.photo-preview');
+  if (preview) {
+    if (files.length === 1) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(files[0]);
+    } else {
+      preview.removeAttribute('src');
+      preview.style.display = 'none';
+    }
+  }
+}
+
+function updatePhotoSelectionLabel(input) {
+  const container = input.closest('.photo-container');
+  if (!container) return;
+
+  let label = container.querySelector('.photo-selection-count');
+  if (!label) {
+    label = document.createElement('div');
+    label.className = 'photo-selection-count';
+    container.appendChild(label);
+  }
+
+  const count = input.files ? input.files.length : 0;
+  label.textContent = count ? `${count} photo${count === 1 ? '' : 's'} selected` : 'Select 2–10 photos';
 }
 
 function compressImage(file, callback) {
@@ -1092,17 +1121,17 @@ async function submitRepair(event) {
   submitButton.innerHTML = '<span class="spinner"></span> Processing...';
 
   try {
-    // Require minimum 2 and maximum 10 selected photos in each section.
-    const beforePhotos = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'))
-      .filter(input => input.files && input.files.length > 0);
-    const afterPhotos = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'))
-      .filter(input => input.files && input.files.length > 0);
+    // Require 2–10 actual files BEFORE and 2–10 actual files AFTER.
+    const beforeInputs = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'));
+    const afterInputs = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'));
+    const beforeCount = beforeInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
+    const afterCount = afterInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
 
-    if (beforePhotos.length < 2 || beforePhotos.length > 10) {
+    if (beforeCount < 2 || beforeCount > 10) {
       alert("Please select minimum 2 and maximum 10 Before photos");
       throw new Error("Invalid before photo count");
     }
-    if (afterPhotos.length < 2 || afterPhotos.length > 10) {
+    if (afterCount < 2 || afterCount > 10) {
       alert("Please select minimum 2 and maximum 10 After photos");
       throw new Error("Invalid after photo count");
     }
