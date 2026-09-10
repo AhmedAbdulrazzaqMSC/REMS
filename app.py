@@ -8,6 +8,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import datetime, timedelta
 import logging
 import io
@@ -96,6 +98,7 @@ class RepairJob(db.Model):
     new_serial = db.Column(db.String(100))
     bottle_number = db.Column(db.String(100))
     labor_hours = db.Column(db.Float)
+    freon_sent_at = db.Column(db.DateTime)
 
 class JobCodeMaster(db.Model):
     __tablename__ = 'job_code_master'
@@ -375,6 +378,9 @@ with app.app_context():
             ))
             db.session.execute(text(
                 "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS bottle_number VARCHAR(100)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS freon_sent_at TIMESTAMP"
             ))
             db.session.commit()
         except Exception:
@@ -1100,6 +1106,176 @@ def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, 
         smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
         app.logger.info(f"Email sent to: {EMAIL_TO}")
 
+
+
+def _weekly_freon_period(reference_date=None):
+    """Return the previous Monday-Sunday period."""
+    today = reference_date or datetime.utcnow().date()
+    current_monday = today - timedelta(days=today.weekday())
+    start_date = current_monday - timedelta(days=7)
+    end_date = current_monday - timedelta(days=1)
+    return start_date, end_date
+
+
+def _build_freon_workbook(rows, start_date, end_date):
+    """Create the weekly Freon registration workbook in memory."""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Freon Registration"
+
+    sheet.append(["Date", "Container nr", "Bottle nr", "Quantity", "Technician"])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1F4E78")
+        cell.alignment = Alignment(horizontal="center")
+
+    for job, report in rows:
+        sheet.append([
+            report.report_date,
+            report.container_number or "",
+            job.bottle_number or "",
+            float(job.quantity or 0),
+            report.technician_name or ""
+        ])
+
+    for cell in sheet["A"][1:]:
+        cell.number_format = "dd/mm/yyyy"
+    for cell in sheet["D"][1:]:
+        cell.number_format = "0.00"
+
+    sheet.column_dimensions["A"].width = 14
+    sheet.column_dimensions["B"].width = 18
+    sheet.column_dimensions["C"].width = 20
+    sheet.column_dimensions["D"].width = 12
+    sheet.column_dimensions["E"].width = 24
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"Freon_Registration_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+    return filename, output.getvalue()
+
+
+def send_weekly_freon_registration(reference_date=None):
+    """Email unsent E001II registrations from the previous Monday-Sunday."""
+    start_date, end_date = _weekly_freon_period(reference_date)
+
+    rows = (
+        db.session.query(RepairJob, RepairReport)
+        .join(RepairReport, RepairJob.report_id == RepairReport.id)
+        .filter(
+            RepairJob.job_code == "E001II",
+            RepairReport.report_date >= start_date,
+            RepairReport.report_date <= end_date,
+            RepairJob.freon_sent_at.is_(None)
+        )
+        .order_by(RepairReport.report_date.asc(), RepairReport.id.asc(), RepairJob.id.asc())
+        .all()
+    )
+
+    smtp_username = os.environ.get("EMAIL_USER")
+    smtp_password = os.environ.get("EMAIL_PASS")
+    email_from = os.environ.get("EMAIL_FROM", smtp_username)
+    recipient_setting = os.environ.get("FREON_EMAIL_TO") or os.environ.get("EMAIL_TO", "")
+    email_to = [address.strip() for address in recipient_setting.split(",") if address.strip()]
+
+    if not smtp_username or not smtp_password:
+        raise RuntimeError("Gmail credentials are not configured")
+    if not email_to:
+        raise RuntimeError("FREON_EMAIL_TO is not configured")
+
+    def esc(value):
+        return html.escape(str(value if value is not None else ""))
+
+    table_rows = ""
+    for job, report in rows:
+        quantity = float(job.quantity or 0)
+        quantity_text = str(int(quantity)) if quantity.is_integer() else f"{quantity:g}"
+        table_rows += f"""
+        <tr>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{report.report_date.strftime('%d/%m/%Y')}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(report.container_number)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(job.bottle_number)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;text-align:right;">{esc(quantity_text)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(report.technician_name)}</td>
+        </tr>"""
+
+    if not table_rows:
+        table_rows = '<tr><td colspan="5" style="padding:10px;border:1px solid #d9d9d9;">No R134A registrations for this period.</td></tr>'
+
+    body = f"""
+    <html><body style="font-family:Arial,sans-serif;color:#222;">
+      <p>Hi,</p>
+      <p>Please find below the weekly Freon registration for <strong>{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}</strong>.</p>
+      <table style="border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#f2f2f2;">
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Date</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Container nr</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Bottle nr</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Quantity</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Technician</th>
+        </tr></thead>
+        <tbody>{table_rows}</tbody>
+      </table>
+      <p>Kind regards,<br>REMS</p>
+    </body></html>
+    """
+
+    msg = MIMEMultipart()
+    msg["From"] = email_from
+    msg["To"] = ", ".join(email_to)
+    msg["Subject"] = f"REMS - Weekly Freon Registration - {start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
+    msg.attach(MIMEText(body, "html"))
+
+    if rows:
+        filename, workbook_bytes = _build_freon_workbook(rows, start_date, end_date)
+        attachment = MIMEApplication(
+            workbook_bytes,
+            _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        attachment.add_header("Content-Disposition", "attachment", filename=filename)
+        msg.attach(attachment)
+
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_username, smtp_password)
+        smtp.sendmail(email_from, email_to, msg.as_string())
+
+    # Only mark records after SMTP confirms the message was sent.
+    sent_at = datetime.utcnow()
+    for job, _report in rows:
+        job.freon_sent_at = sent_at
+    db.session.commit()
+
+    app.logger.info(
+        "Weekly Freon registration sent: %s rows, %s to %s",
+        len(rows), start_date, end_date
+    )
+    return {
+        "status": "success",
+        "count": len(rows),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
+    }
+
+
+@app.route('/api/weekly-freon-registration', methods=['POST'])
+def weekly_freon_registration_route():
+    """Protected endpoint intended for the Render Cron Job."""
+    expected_secret = os.environ.get("CRON_SECRET", "").strip()
+    supplied_secret = request.headers.get("X-Cron-Secret", "").strip()
+    if not expected_secret or supplied_secret != expected_secret:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    try:
+        result = send_weekly_freon_registration()
+        return jsonify(result), 200
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.error("Weekly Freon registration failed: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 def send_repair_zone_email(container_number, technician_name, current_position):
     smtp_server = 'smtp.gmail.com'
