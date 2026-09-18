@@ -21,6 +21,7 @@ import http.cookiejar
 import html
 import xml.etree.ElementTree as ET
 from werkzeug.utils import secure_filename
+from collections import Counter
 
 # ===================================
 # Initialize Flask App
@@ -240,40 +241,110 @@ def read_local_excel_sheet(file_path, sheet_name):
 
 
 def seed_master_data():
-    """Load bundled One Vision job codes and spare parts into PostgreSQL once."""
+    """Synchronize Terminal ER job codes and load model-specific parts/labor masters."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    job_file = os.path.join(base_dir, 'job_codes_master.xlsx')
+    job_file = os.path.join(base_dir, 'Terminal ER Extract.xlsx')
     parts_file = os.path.join(base_dir, 'parts_master.xlsx')
 
-    if JobCodeMaster.query.count() == 0:
-        if not os.path.exists(job_file):
-            app.logger.warning('Job-code master file not found: %s', job_file)
-        else:
-            rows = read_local_excel_sheet(job_file, 'Job Code Master')
-            if rows:
-                headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
-                def val(row, name):
-                    i = headers.get(name.casefold())
-                    return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
-                seen = set()
-                for row in rows[1:]:
-                    code = val(row, 'Job Code').upper()
-                    code_type = val(row, 'Job Code Type')
-                    if not code or code in seen or code_type.casefold() not in {'machinery', 'service'}:
-                        continue
-                    seen.add(code)
-                    db.session.add(JobCodeMaster(
-                        job_code=code,
-                        description=val(row, 'Job Code Description'),
-                        job_code_type=code_type,
-                        component_code=val(row, 'Component Code'),
-                        repair_type=val(row, 'Repair Type'),
-                        damage_location=val(row, 'Damage Location'),
-                        damage_type=val(row, 'Damage Type'),
-                        material_type=val(row, 'Material Type')
-                    ))
-                db.session.commit()
-                app.logger.info('Loaded %s One Vision job codes', len(seen))
+    # Synchronize the job-code table directly from Terminal ER Extract.xlsx.
+    # The extract contains repeated repair rows, so REMS groups them by Job Code
+    # and keeps one searchable master entry per unique code.
+    if not os.path.exists(job_file):
+        app.logger.warning('Terminal ER Extract not found: %s', job_file)
+    else:
+        rows = read_local_excel_sheet(job_file, 'Terminal ER Extract')
+        if rows:
+            headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+
+            def val(row, name):
+                i = headers.get(name.casefold())
+                return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+
+            required_headers = {
+                'job code',
+                'job description',
+                'component code',
+                'repair type',
+                'damage location',
+                'damage type',
+                'material type'
+            }
+            missing_headers = sorted(required_headers.difference(headers.keys()))
+            if missing_headers:
+                raise ValueError(
+                    'Terminal ER Extract is missing required columns: ' +
+                    ', '.join(missing_headers)
+                )
+
+            grouped = {}
+            field_map = {
+                'description': 'Job Description',
+                'component_code': 'Component Code',
+                'repair_type': 'Repair Type',
+                'damage_location': 'Damage Location',
+                'damage_type': 'Damage Type',
+                'material_type': 'Material Type'
+            }
+
+            for row in rows[1:]:
+                code = val(row, 'Job Code').upper()
+                if not code:
+                    continue
+
+                if code not in grouped:
+                    grouped[code] = {
+                        key: Counter() for key in field_map
+                    }
+
+                for key, header_name in field_map.items():
+                    value = val(row, header_name)
+                    if value:
+                        grouped[code][key][value] += 1
+
+            def most_common(counter):
+                return counter.most_common(1)[0][0] if counter else ''
+
+            source_codes = {}
+            for code, counters in grouped.items():
+                source_codes[code] = {
+                    'description': most_common(counters['description']),
+                    'job_code_type': 'Terminal ER Extract',
+                    'component_code': most_common(counters['component_code']),
+                    'repair_type': most_common(counters['repair_type']),
+                    'damage_location': most_common(counters['damage_location']),
+                    'damage_type': most_common(counters['damage_type']),
+                    'material_type': most_common(counters['material_type'])
+                }
+
+            existing_codes = {
+                item.job_code: item for item in JobCodeMaster.query.all()
+            }
+
+            # Add/update every code found in the extract.
+            for code, data in source_codes.items():
+                item = existing_codes.get(code)
+                if item is None:
+                    item = JobCodeMaster(job_code=code)
+                    db.session.add(item)
+
+                item.description = data['description']
+                item.job_code_type = data['job_code_type']
+                item.component_code = data['component_code']
+                item.repair_type = data['repair_type']
+                item.damage_location = data['damage_location']
+                item.damage_type = data['damage_type']
+                item.material_type = data['material_type']
+
+            # Remove the old job codes that are not present in this extract.
+            for code, item in existing_codes.items():
+                if code not in source_codes:
+                    db.session.delete(item)
+
+            db.session.commit()
+            app.logger.info(
+                'Synchronized %s job codes from Terminal ER Extract',
+                len(source_codes)
+            )
 
     model_files = {
         'PrimeLine': 'Primeline.xlsx',
