@@ -451,7 +451,7 @@ def search_job_codes():
             JobCodeMaster.description.ilike(pattern)
         ))
     jobs = query.order_by(JobCodeMaster.job_code.asc()).limit(50).all()
-    return jsonify({"results": [{
+    results = [{
         "id": job.job_code,
         "text": f"{job.job_code} — {job.description}",
         "code": job.job_code,
@@ -460,7 +460,22 @@ def search_job_codes():
         "component_code": job.component_code or "",
         "repair_type": job.repair_type or "",
         "material_type": job.material_type or ""
-    } for job in jobs]})
+    } for job in jobs]
+
+    # REMS-only special job; no master-data/database change required.
+    if not q or "ice" in q.casefold() or "procedure" in q.casefold():
+        results.insert(0, {
+            "id": "ICE_PROCEDURE",
+            "text": "Ice Procedure",
+            "code": "ICE_PROCEDURE",
+            "description": "Ice Procedure",
+            "type": "special",
+            "component_code": "",
+            "repair_type": "",
+            "material_type": ""
+        })
+
+    return jsonify({"results": results[:50]})
 
 @app.route('/api/parts', methods=['GET'])
 def search_spare_parts():
@@ -694,8 +709,35 @@ def submit_report():
         db.session.flush()  # Get report ID
 
         # Jobs
+        # Ice Procedure is email-only and is not stored in repair_jobs.
         job_count = int(form_data.get('job_count', 0))
+        ice_procedures = []
         for i in range(job_count):
+            job_code = str(form_data.get(f'job[{i}][code]') or '').strip().upper()
+
+            if job_code == 'ICE_PROCEDURE':
+                alarm_active = str(form_data.get(f'job[{i}][ice_alarm_active]') or '').strip()
+                ice_alarm = str(form_data.get(f'job[{i}][ice_alarm]') or '').strip()
+                ice_data = {
+                    'cd26': str(form_data.get(f'job[{i}][ice_cd26]') or '').strip(),
+                    'cd27': str(form_data.get(f'job[{i}][ice_cd27]') or '').strip(),
+                    'drain_hose': str(form_data.get(f'job[{i}][ice_drain_hose]') or '').strip(),
+                    'upper_supply_sensor': str(form_data.get(f'job[{i}][ice_upper_supply_sensor]') or '').strip(),
+                    'lower_supply_sensor': str(form_data.get(f'job[{i}][ice_lower_supply_sensor]') or '').strip(),
+                    'alarm_active': alarm_active,
+                    'alarm': ice_alarm
+                }
+                if not all([
+                    ice_data['cd26'], ice_data['cd27'], ice_data['drain_hose'],
+                    ice_data['upper_supply_sensor'], ice_data['lower_supply_sensor'],
+                    ice_data['alarm_active']
+                ]):
+                    return jsonify({"status": "error", "message": "Please complete all Ice Procedure fields"}), 400
+                if alarm_active.casefold() == 'yes' and not ice_alarm:
+                    return jsonify({"status": "error", "message": "Please enter the active alarm for the Ice Procedure"}), 400
+                ice_procedures.append(ice_data)
+                continue
+
             job = RepairJob(
                 report_id=report.id,
                 job_code=form_data.get(f'job[{i}][code]'),
@@ -752,7 +794,8 @@ def submit_report():
                 jobs=jobs,
                 alarms=alarms,
                 afmelding=form_data.get("afmelding", ""),
-                photo_counts=photo_counts
+                photo_counts=photo_counts,
+                ice_procedures=ice_procedures
             )
         except Exception as e:
             app.logger.error(f"Email failed: {str(e)}")
@@ -903,7 +946,7 @@ def read_repair_list_from_excel(share_url):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
 
-def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
+def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None, ice_procedures=None):
     """Create the original REMS email layout with the updated Job Tasks section."""
     if not report:
         return "<p>Repair Report submitted</p>"
@@ -1047,6 +1090,27 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
         </div>
         """
 
+    if ice_procedures:
+        for ice in ice_procedures:
+            alarm_row = ""
+            if str(ice.get('alarm_active') or '').strip().casefold() == 'yes':
+                alarm_row = f"<tr><th>Alarm</th><td>{safe(ice.get('alarm'))}</td></tr>"
+
+            html_body += f"""
+        <div class="section">
+            <div class="section-title">Ice Procedure</div>
+            <table>
+                <tr><th>CD26</th><td>{safe(ice.get('cd26'))}</td></tr>
+                <tr><th>CD27</th><td>{safe(ice.get('cd27'))}</td></tr>
+                <tr><th>Drain hose</th><td>{safe(ice.get('drain_hose'))}</td></tr>
+                <tr><th>Upper supply sensor</th><td>{safe(ice.get('upper_supply_sensor'))}</td></tr>
+                <tr><th>Lower supply sensor</th><td>{safe(ice.get('lower_supply_sensor'))}</td></tr>
+                <tr><th>Alarm Active</th><td>{safe(ice.get('alarm_active'))}</td></tr>
+                {alarm_row}
+            </table>
+        </div>
+            """
+
     if alarms:
         html_body += """
         <div class="section">
@@ -1070,7 +1134,7 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None):
     return html_body
 
 
-def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding="", photo_counts=None):
+def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding="", photo_counts=None, ice_procedures=None):
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = os.environ.get('EMAIL_USER')
@@ -1083,7 +1147,7 @@ def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, 
     msg['To'] = ', '.join(EMAIL_TO)
     msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
 
-    html_content = create_email_body(report, jobs, alarms, afmelding, photo_counts)
+    html_content = create_email_body(report, jobs, alarms, afmelding, photo_counts, ice_procedures)
     msg.attach(MIMEText(html_content, 'html'))
 
     for filepath in attachments:
