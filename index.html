@@ -673,7 +673,7 @@ function addJob() {
     <label>Used Part</label>
     <div class="autocomplete-wrap">
       <input type="text" class="autocomplete-input part-autocomplete"
-             autocomplete="off" placeholder="Type part number or description (optional)">
+             autocomplete="off" placeholder="Select Model Family, then type part number or description">
       <div class="autocomplete-results"></div>
     </div>
     <input type="hidden" name="part_number[]">
@@ -707,6 +707,14 @@ function addJob() {
 
   container.appendChild(fieldset);
   initializeAutocomplete(fieldset);
+
+  const currentFamily = document.getElementById('model_family')?.value?.trim() || '';
+  const partSearch = fieldset.querySelector('.part-autocomplete');
+  if (partSearch) {
+    partSearch.placeholder = currentFamily
+      ? `Search ${currentFamily} parts`
+      : 'Select Model Family first';
+  }
 }
 
 function updateSerialRequirements(fieldset) {
@@ -1041,7 +1049,13 @@ async function recalculateLabor(fieldset) {
       const partDescription = section.querySelector('input[name="part_description[]"]');
       const quantityNote = section.querySelector('.quantity-note');
 
-      if (partText) partText.value = '';
+      if (partText) {
+        partText.value = '';
+        const selectedFamily = document.getElementById('model_family')?.value?.trim() || '';
+        partText.placeholder = selectedFamily
+          ? `Search ${selectedFamily} parts`
+          : 'Select Model Family first';
+      }
       if (partNumber) partNumber.value = '';
       if (partDescription) partDescription.value = '';
       if (quantityNote) quantityNote.textContent = '';
