@@ -647,11 +647,33 @@ function addJob() {
     <input type="hidden" name="job_code[]">
     <input type="hidden" name="repair_type[]">
 
+    <div class="ice-procedure-fields" style="display:none">
+      <div style="background:#eef6ff;border:1px solid #b8d7f5;border-radius:6px;padding:12px;margin:8px 0 14px;">
+        <strong style="display:block;color:#003366;margin-bottom:10px;">Ice Procedure</strong>
+        <label>CD26 / Value</label>
+        <input type="text" name="ice_cd26[]" autocomplete="off">
+        <label>CD27</label>
+        <select name="ice_cd27[]"><option value="">Select</option><option value="PuLs">PuLs</option><option value="AuTo">AuTo</option></select>
+        <label>Drain hose</label>
+        <select name="ice_drain_hose[]"><option value="">Select</option><option value="Dry">Dry</option><option value="Wet">Wet</option></select>
+        <label>Upper supply sensor</label>
+        <select name="ice_upper_supply_sensor[]"><option value="">Select</option><option value="Free">Free</option><option value="Stuck">Stuck</option></select>
+        <label>Lower supply sensor</label>
+        <select name="ice_lower_supply_sensor[]"><option value="">Select</option><option value="Free">Free</option><option value="Stuck">Stuck</option></select>
+        <label>Alarm Active</label>
+        <select name="ice_alarm_active[]" onchange="toggleIceAlarm(this)"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+        <div class="ice-alarm-entry" style="display:none">
+          <label>Alarm</label>
+          <input type="text" name="ice_alarm[]" placeholder="Enter active alarm" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
     <div class="standard-job-fields">
     <label>Used Part</label>
     <div class="autocomplete-wrap">
       <input type="text" class="autocomplete-input part-autocomplete"
-             autocomplete="off" placeholder="Type part number or description (optional)">
+             autocomplete="off" placeholder="Select Model Family, then type part number or description">
       <div class="autocomplete-results"></div>
     </div>
     <input type="hidden" name="part_number[]">
@@ -685,6 +707,14 @@ function addJob() {
 
   container.appendChild(fieldset);
   initializeAutocomplete(fieldset);
+
+  const currentFamily = document.getElementById('model_family')?.value?.trim() || '';
+  const partSearch = fieldset.querySelector('.part-autocomplete');
+  if (partSearch) {
+    partSearch.placeholder = currentFamily
+      ? `Search ${currentFamily} parts`
+      : 'Select Model Family first';
+  }
 }
 
 function updateSerialRequirements(fieldset) {
@@ -723,22 +753,73 @@ function updateSerialRequirements(fieldset) {
   }
 }
 
+function toggleIceAlarm(select) {
+  const fieldset = select.closest('.job-section');
+  const alarmEntry = fieldset?.querySelector('.ice-alarm-entry');
+  const alarmInput = fieldset?.querySelector('input[name="ice_alarm[]"]');
+  const isActive = select.value === 'Yes';
+  if (alarmEntry) alarmEntry.style.display = isActive ? '' : 'none';
+  if (alarmInput) {
+    alarmInput.required = isActive;
+    if (!isActive) alarmInput.value = '';
+  }
+}
+
 function applySpecialJobLayout(fieldset) {
   const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
   const isRefrigerant = jobCode === 'E001II';
+  const isIceProcedure = jobCode === 'ICE_PROCEDURE';
 
   const standardPart = fieldset.querySelector('.standard-job-fields');
   const standardDetails = fieldset.querySelector('.standard-job-details');
   const bottleField = fieldset.querySelector('.refrigerant-bottle-field');
+  const iceFields = fieldset.querySelector('.ice-procedure-fields');
+  const quantityInput = fieldset.querySelector('input[name="quantity[]"]');
+  const quantityLabel = quantityInput?.previousElementSibling;
   const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+  const laborLabel = laborInput?.previousElementSibling;
   const laborNote = fieldset.querySelector('.labor-note');
 
-  if (standardPart) standardPart.style.display = isRefrigerant ? 'none' : '';
-  if (standardDetails) standardDetails.style.display = isRefrigerant ? 'none' : '';
+  if (standardPart) standardPart.style.display = (isRefrigerant || isIceProcedure) ? 'none' : '';
+  if (standardDetails) standardDetails.style.display = (isRefrigerant || isIceProcedure) ? 'none' : '';
   if (bottleField) bottleField.style.display = isRefrigerant ? '' : 'none';
+  if (iceFields) iceFields.style.display = isIceProcedure ? '' : 'none';
+  if (quantityInput) quantityInput.style.display = isIceProcedure ? 'none' : '';
+  if (quantityLabel) quantityLabel.style.display = isIceProcedure ? 'none' : '';
+  if (laborInput) laborInput.style.display = isIceProcedure ? 'none' : '';
+  if (laborLabel) laborLabel.style.display = isIceProcedure ? 'none' : '';
+  if (laborNote) laborNote.style.display = isIceProcedure ? 'none' : 'block';
+
+  [
+    'input[name="ice_cd26[]"]',
+    'select[name="ice_cd27[]"]',
+    'select[name="ice_drain_hose[]"]',
+    'select[name="ice_upper_supply_sensor[]"]',
+    'select[name="ice_lower_supply_sensor[]"]',
+    'select[name="ice_alarm_active[]"]'
+  ].forEach(selector => {
+    const input = fieldset.querySelector(selector);
+    if (input) input.required = isIceProcedure;
+  });
+
+  const alarmActive = fieldset.querySelector('select[name="ice_alarm_active[]"]');
+  if (alarmActive) toggleIceAlarm(alarmActive);
+
+  if (isIceProcedure) {
+    fieldset.querySelector('input[name="part_number[]"]').value = '';
+    fieldset.querySelector('input[name="part_description[]"]').value = '';
+    fieldset.querySelector('input[name="serial_old[]"]').value = '';
+    fieldset.querySelector('input[name="serial_new[]"]').value = '';
+    const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
+    if (bottle) bottle.value = '';
+    if (quantityInput) { quantityInput.required = false; quantityInput.value = '1'; }
+    if (laborInput) { laborInput.readOnly = true; laborInput.value = '0'; }
+    return;
+  }
+
+  if (quantityInput) quantityInput.required = true;
 
   if (isRefrigerant) {
-    // Refrigerant R134A Charge: only Quantity, Bottle nr and fixed Labor Hours.
     const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
     const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
     if (oldSerial) oldSerial.required = false;
@@ -782,7 +863,10 @@ function initializeAutocomplete(fieldset) {
   setupAutocomplete(
     fieldset,
     '.part-autocomplete',
-    '/api/parts',
+    () => {
+      const modelFamily = document.getElementById('model_family')?.value?.trim() || '';
+      return `/api/parts?model_family=${encodeURIComponent(modelFamily)}`;
+    },
     data => {
       fieldset.querySelector('input[name="part_number[]"]').value = data.part_number || data.id || '';
       fieldset.querySelector('input[name="part_description[]"]').value = data.description || '';
@@ -819,6 +903,15 @@ function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
     const q = input.value.trim();
     clearTimeout(timer);
 
+    if (selector === '.part-autocomplete') {
+      const modelFamily = document.getElementById('model_family')?.value?.trim() || '';
+      if (!modelFamily) {
+        results.innerHTML = '<div class="autocomplete-empty">Select Model Family first</div>';
+        results.classList.add('open');
+        return;
+      }
+    }
+
     if (!q) {
       close();
       return;
@@ -827,7 +920,9 @@ function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
     timer = setTimeout(async () => {
       const thisRequest = ++requestId;
       try {
-        const response = await fetch(`${url}?q=${encodeURIComponent(q)}`);
+        const baseUrl = (typeof url === 'function') ? url() : url;
+        const separator = baseUrl.includes('?') ? '&' : '?';
+        const response = await fetch(`${baseUrl}${separator}q=${encodeURIComponent(q)}`);
         const payload = await response.json();
         if (thisRequest !== requestId) return;
 
@@ -876,6 +971,15 @@ function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
 
 async function recalculateLabor(fieldset) {
   const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
+  if (jobCode === 'ICE_PROCEDURE') {
+    const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
+    if (laborInput) {
+      laborInput.value = '0';
+      laborInput.readOnly = true;
+    }
+    return;
+  }
+
   if (jobCode === 'E001II') {
     const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
     const laborNote = fieldset.querySelector('.labor-note');
@@ -939,7 +1043,26 @@ async function recalculateLabor(fieldset) {
 
 ['input', 'change'].forEach(eventName => {
   document.getElementById('model_family')?.addEventListener(eventName, () => {
-    document.querySelectorAll('.job-section').forEach(section => recalculateLabor(section));
+    document.querySelectorAll('.job-section').forEach(section => {
+      const partText = section.querySelector('.part-autocomplete');
+      const partNumber = section.querySelector('input[name="part_number[]"]');
+      const partDescription = section.querySelector('input[name="part_description[]"]');
+      const quantityNote = section.querySelector('.quantity-note');
+
+      if (partText) {
+        partText.value = '';
+        const selectedFamily = document.getElementById('model_family')?.value?.trim() || '';
+        partText.placeholder = selectedFamily
+          ? `Search ${selectedFamily} parts`
+          : 'Select Model Family first';
+      }
+      if (partNumber) partNumber.value = '';
+      if (partDescription) partDescription.value = '';
+      if (quantityNote) quantityNote.textContent = '';
+
+      updateSerialRequirements(section);
+      recalculateLabor(section);
+    });
   });
 });
 
@@ -1247,6 +1370,21 @@ async function submitRepair(event) {
       formData.append(`job[${index}][bottle_number]`, bottleInput ? bottleInput.value : "");
       formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
       formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
+
+      const iceCd26 = section.querySelector("[name='ice_cd26[]']");
+      const iceCd27 = section.querySelector("[name='ice_cd27[]']");
+      const iceDrain = section.querySelector("[name='ice_drain_hose[]']");
+      const iceUpper = section.querySelector("[name='ice_upper_supply_sensor[]']");
+      const iceLower = section.querySelector("[name='ice_lower_supply_sensor[]']");
+      const iceAlarmActive = section.querySelector("[name='ice_alarm_active[]']");
+      const iceAlarm = section.querySelector("[name='ice_alarm[]']");
+      formData.append(`job[${index}][ice_cd26]`, iceCd26 ? iceCd26.value : "");
+      formData.append(`job[${index}][ice_cd27]`, iceCd27 ? iceCd27.value : "");
+      formData.append(`job[${index}][ice_drain_hose]`, iceDrain ? iceDrain.value : "");
+      formData.append(`job[${index}][ice_upper_supply_sensor]`, iceUpper ? iceUpper.value : "");
+      formData.append(`job[${index}][ice_lower_supply_sensor]`, iceLower ? iceLower.value : "");
+      formData.append(`job[${index}][ice_alarm_active]`, iceAlarmActive ? iceAlarmActive.value : "");
+      formData.append(`job[${index}][ice_alarm]`, iceAlarm ? iceAlarm.value : "");
     });
 
     const alarmInputs = document.querySelectorAll("input[name='alarm']");
