@@ -1,1400 +1,1412 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>REMS – Reefer Equipment Maintenance System</title>
-<style>
-    * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
-    header { background: #003366; color: white; padding: 15px 20px; text-align: center; font-size: 20px; position: relative; }
-    main { padding: 20px; max-width: 1200px; margin: auto; }
-    form {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 15px;
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-    label { font-weight: bold; margin-bottom: 5px; display: block; }
-    input, select, textarea, button {
-      padding: 8px;
-      width: 100%;
-      font-size: 14px;
-      margin-bottom: 10px;
-    }
-    textarea { resize: vertical; }
-    .full-width { grid-column: 1 / -1; }
-    fieldset { border: 1px solid #ccc; padding: 10px; border-radius: 5px; position: relative; }
-    legend { font-weight: bold; }
-    button.add-button {
-      background-color: #003366;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    button.add-button:hover { background-color: #0059b3; }
-    @media (max-width: 768px) {
-      form { grid-template-columns: 1fr; }
-    }
-    #loginOverlay {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.8);
-      display: flex; justify-content: center; align-items: center;
-      z-index: 9999;
-    }
-    #loginBox {
-      background: white; padding: 20px; border-radius: 8px;
-      max-width: 300px; width: 90%;
-    }
-    #loginBox input { width: 100%; margin-bottom: 10px; padding: 8px; }
-    #loginError { color: red; display: none; font-size: 14px; }
-    .job-section { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 5px; }
-    .remove-btn {
-      position: absolute;
-      right: 10px;
-      top: 10px;
-      background: #990000;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .remove-btn:hover {
-      background: #770000;
-    }
-    .photo-container {
-      position: relative;
-      margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .photo-remove-btn {
-      background: #990000;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      cursor: pointer;
-      font-size: 16px;
-      line-height: 1;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .photo-remove-btn:hover {
-      background: #770000;
-    }
-    .photo-input {
-      flex-grow: 1;
-    }
-    .photo-section {
-      margin-bottom: 15px;
-    }
-    .photo-section label {
-      margin-bottom: 8px;
-      display: block;
-    }
-    .alarm-input-container {
-      position: relative;
-      margin-bottom: 10px;
-    }
-    button:disabled {
-      background-color: #cccccc !important;
-      cursor: not-allowed;
-      opacity: 0.7;
-    }
-    #submitButton {
-      transition: background-color 0.3s ease;
-    }
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      border-top-color: white;
-      animation: spin 1s ease-in-out infinite;
-      margin-right: 8px;
-      vertical-align: middle;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .invalid-temp {
-      border: 1px solid red;
-      background-color: #ffeeee;
-    }
-    .photo-preview {
-      max-width: 100px;
-      max-height: 100px;
-      margin-top: 5px;
-      display: none;
-    }
-    .compression-info {
-      font-size: 12px;
-      color: #666;
-      margin-top: 5px;
-    }
-    .view-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .view-toolbar h2 { margin: 0; color: #003366; }
-    .secondary-button { width: auto; margin: 0; padding: 9px 14px; border: 1px solid #003366; border-radius: 5px; background: white; color: #003366; cursor: pointer; }
-    #repairListView { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,.1); }
-    .table-wrap { overflow-x: auto; }
-    .repair-table { width: 100%; border-collapse: collapse; min-width: 900px; }
-    .repair-table th, .repair-table td { padding: 11px 10px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
-    .repair-table th { background: #003366; color: white; position: sticky; top: 0; }
-    .container-link { color: #0059b3; font-weight: bold; border: 0; padding: 0; margin: 0; width: auto; background: none; cursor: pointer; text-decoration: underline; }
-    .history-button { width: 28px; height: 28px; margin: 0; padding: 0; border: 1px solid #0059b3; border-radius: 50%; color: #0059b3; background: #eef6ff; cursor: pointer; font-weight: bold; line-height: 26px; text-align: center; }
-    .list-message { padding: 28px; text-align: center; color: #666; }
-    #reportView { display: none; }
-    #historyModal { display:none; position:fixed; inset:0; z-index:9500; background:rgba(0,0,0,.62); padding:20px; overflow:auto; }
-    .history-dialog { max-width:760px; margin:35px auto; background:white; border-radius:10px; box-shadow:0 18px 60px rgba(0,0,0,.35); overflow:hidden; }
-    .history-header { display:flex; justify-content:space-between; align-items:center; gap:15px; padding:16px 20px; background:#003366; color:white; }
-    .history-header h2 { margin:0; font-size:19px; }
-    .history-close { width:auto; margin:0; padding:2px 8px; border:0; background:transparent; color:white; font-size:28px; cursor:pointer; }
-    #historyContent { padding:18px 20px; }
-    .history-card { border:1px solid #d8d8d8; border-radius:7px; padding:15px; margin-bottom:14px; }
-    .history-meta { font-weight:bold; color:#003366; margin-bottom:12px; }
-    .history-card h4 { margin:13px 0 6px; color:#333; }
-    .history-card p { margin:0; white-space:pre-wrap; }
-    .history-jobs { margin:0; padding-left:20px; }
-    #containerActionModal, #repairZoneModal { display:none; position:fixed; inset:0; z-index:9600; background:rgba(0,0,0,.62); padding:20px; overflow:auto; }
-    .action-dialog { max-width:460px; margin:90px auto; background:white; border-radius:10px; box-shadow:0 18px 60px rgba(0,0,0,.35); overflow:hidden; }
-    .action-body { padding:22px; }
-    .action-body p { margin:0 0 16px; }
-    .action-buttons { display:grid; gap:10px; }
-    .action-button { width:100%; margin:0; padding:12px 14px; border-radius:6px; cursor:pointer; font-weight:bold; }
-    .report-action { border:1px solid #003366; background:#003366; color:white; }
-    .zone-action { border:1px solid #b56700; background:#fff4e5; color:#8a4e00; }
-    .cancel-action { border:1px solid #aaa; background:white; color:#444; }
-    #repairZonePosition { width:100%; box-sizing:border-box; margin:6px 0 18px; padding:10px; border:1px solid #aaa; border-radius:5px; font-size:16px; text-transform:uppercase; }
-    #repairZoneError { display:none; margin:0 0 14px; color:#b00020; }
+import os
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text, or_
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from datetime import datetime, timedelta
+import logging
+import io
+import re
+import zipfile
+import urllib.request
+import urllib.parse
+import http.cookiejar
+import html
+import xml.etree.ElementTree as ET
+from werkzeug.utils import secure_filename
 
-    /* Editable Job / Part autocomplete */
-    .autocomplete-wrap { position: relative; margin-bottom: 14px; }
-    .autocomplete-wrap input.autocomplete-input {
-      width: 100%; height: 38px; margin: 0; padding: 8px 10px;
-      border: 1px solid #aaa; border-radius: 4px; background: #fff;
+# ===================================
+# Initialize Flask App
+# ===================================
+app = Flask(__name__, static_folder='static')
+CORS(app, resources={
+    r"/api/*": {"origins": "*"},
+    r"/static/*": {"origins": "*"}
+})
+
+# ===================================
+# Database Configuration
+# ===================================
+db_url = os.environ.get('DATABASE_URL')
+if not db_url:
+    raise RuntimeError("DATABASE_URL environment variable is not set")
+
+# Adjust for postgres:// vs postgresql://
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+
+app.config.update({
+    'SQLALCHEMY_DATABASE_URI': db_url,
+    'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+    'SQLALCHEMY_ENGINE_OPTIONS': {
+        'pool_size': 5,
+        'pool_recycle': 300,
+        'pool_pre_ping': True
+    },
+    'UPLOAD_FOLDER': os.path.join(os.getcwd(), 'uploads'),
+    'MAX_CONTENT_LENGTH': 16 * 1024 * 1024  # 16MB
+})
+
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+db = SQLAlchemy(app)
+
+# ===================================
+# Database Models
+# ===================================
+class RepairReport(db.Model):
+    __tablename__ = 'repair_reports'
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), nullable=False)
+    report_date = db.Column(db.Date, nullable=False)
+    technician_name = db.Column(db.String(100), nullable=False)
+    model = db.Column(db.String(100))
+    model_family = db.Column(db.String(50))
+    serial_number = db.Column(db.String(100))
+    warranty_id = db.Column(db.String(100))
+    warranty_status = db.Column(db.String(100))
+    setpoint = db.Column(db.Float)
+    vents = db.Column(db.String(50))
+    humidity = db.Column(db.String(50))
+    ambient_temp = db.Column(db.Float)
+    supply_temp_before = db.Column(db.Float)
+    supply_temp_after = db.Column(db.Float)
+    return_temp_before = db.Column(db.Float)
+    return_temp_after = db.Column(db.Float)
+    temp_in_range = db.Column(db.String(50))
+    problem_description = db.Column(db.Text)
+    comments = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class RepairJob(db.Model):
+    __tablename__ = 'repair_jobs'
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey('repair_reports.id'), nullable=False)
+    job_code = db.Column(db.String(50))
+    description = db.Column(db.String(255))
+    part_number = db.Column(db.String(100))
+    part_description = db.Column(db.String(255))
+    quantity = db.Column(db.Float)
+    damage_type = db.Column(db.String(50))
+    old_serial = db.Column(db.String(100))
+    new_serial = db.Column(db.String(100))
+    bottle_number = db.Column(db.String(100))
+    labor_hours = db.Column(db.Float)
+    freon_sent_at = db.Column(db.DateTime)
+
+class JobCodeMaster(db.Model):
+    __tablename__ = 'job_code_master'
+    id = db.Column(db.Integer, primary_key=True)
+    job_code = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255), nullable=False, index=True)
+    job_code_type = db.Column(db.String(50), nullable=False)
+    component_code = db.Column(db.String(50))
+    repair_type = db.Column(db.String(50))
+    damage_location = db.Column(db.String(50))
+    damage_type = db.Column(db.String(50))
+    material_type = db.Column(db.String(50))
+
+class SparePartMaster(db.Model):
+    __tablename__ = 'spare_part_master'
+    id = db.Column(db.Integer, primary_key=True)
+    part_number = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    replaced_by = db.Column(db.String(100))
+    description = db.Column(db.String(500), index=True)
+    max_qty = db.Column(db.String(50))
+
+class LaborRuleMaster(db.Model):
+    __tablename__ = 'labor_rule_master'
+    id = db.Column(db.Integer, primary_key=True)
+    model_family = db.Column(db.String(50), nullable=False, index=True)
+    part_number = db.Column(db.String(100), nullable=False, index=True)
+    part_description = db.Column(db.Text)
+    damage_code = db.Column(db.String(50), index=True)
+    repair_code = db.Column(db.String(50), index=True)
+    repair_description = db.Column(db.Text)
+    first_hour = db.Column(db.Float, nullable=False, default=0)
+
+class Alarm(db.Model):
+    __tablename__ = 'alarms'
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey('repair_reports.id'), nullable=False)
+    alarm_code = db.Column(db.String(100))
+
+class RepairListItem(db.Model):
+    __tablename__ = 'repair_list_items'
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), unique=True, nullable=False, index=True)
+    order_temp = db.Column(db.String(50))
+    position = db.Column(db.String(100))
+    alarms = db.Column(db.Text)
+    etd = db.Column(db.String(50))
+    vessel = db.Column(db.String(150))
+    requested_repair = db.Column(db.Text)
+    remarks = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "container_number": self.container_number,
+            "order_temp": self.order_temp or "",
+            "position": self.position or "",
+            "alarms": self.alarms or "",
+            "etd": self.etd or "",
+            "vessel": self.vessel or "",
+            "requested_repair": self.requested_repair or "",
+            "remarks": self.remarks or ""
+        }
+
+class RepairZoneRequest(db.Model):
+    __tablename__ = 'repair_zone_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    container_number = db.Column(db.String(11), nullable=False, index=True)
+    technician_name = db.Column(db.String(100), nullable=False)
+    current_position = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+def read_local_excel_sheet(file_path, sheet_name):
+    """Read a worksheet from a bundled .xlsx file without an external Excel dependency."""
+    spreadsheet_ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    relationship_ns = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    office_rel_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+    def local_excel_column_index(cell_reference):
+        letters = re.match(r'[A-Z]+', cell_reference or '')
+        if not letters:
+            return 0
+        result = 0
+        for char in letters.group(0):
+            result = result * 26 + ord(char) - 64
+        return result - 1
+
+    with zipfile.ZipFile(file_path) as archive:
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in archive.namelist():
+            shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+            for item in shared_root.findall(f'{{{spreadsheet_ns}}}si'):
+                shared_strings.append(''.join(node.text or '' for node in item.iter(f'{{{spreadsheet_ns}}}t')))
+
+        workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+        selected_sheet = None
+        for sheet in workbook_root.findall(f'.//{{{spreadsheet_ns}}}sheet'):
+            if sheet.attrib.get('name', '').strip().casefold() == sheet_name.strip().casefold():
+                selected_sheet = sheet
+                break
+        if selected_sheet is None:
+            raise ValueError(f'Worksheet {sheet_name!r} not found in {os.path.basename(file_path)}')
+
+        relationship_id = selected_sheet.attrib.get(f'{{{office_rel_ns}}}id')
+        rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        target = None
+        for relation in rels_root.findall(f'{{{relationship_ns}}}Relationship'):
+            if relation.attrib.get('Id') == relationship_id:
+                target = relation.attrib.get('Target')
+                break
+        if not target:
+            raise ValueError(f'Could not locate worksheet {sheet_name!r}')
+
+        worksheet_path = target.lstrip('/') if target.startswith('/xl/') else 'xl/' + target.lstrip('/')
+        worksheet_path = worksheet_path.replace('xl/xl/', 'xl/')
+        sheet_root = ET.fromstring(archive.read(worksheet_path))
+        rows = []
+        for row in sheet_root.findall(f'.//{{{spreadsheet_ns}}}row'):
+            values = {}
+            next_column = 0
+            for cell in row.findall(f'{{{spreadsheet_ns}}}c'):
+                cell_reference = cell.attrib.get('r', '')
+                column = local_excel_column_index(cell_reference) if cell_reference else next_column
+                next_column = column + 1
+                cell_type = cell.attrib.get('t')
+                value_node = cell.find(f'{{{spreadsheet_ns}}}v')
+                if cell_type == 'inlineStr':
+                    inline = cell.find(f'{{{spreadsheet_ns}}}is')
+                    value = ''.join(node.text or '' for node in inline.iter(f'{{{spreadsheet_ns}}}t')) if inline is not None else ''
+                else:
+                    value = value_node.text if value_node is not None else ''
+                    if cell_type == 's' and value:
+                        value = shared_strings[int(value)]
+                values[column] = value
+            if values:
+                rows.append([values.get(i, '') for i in range(max(values) + 1)])
+    return rows
+
+
+def seed_master_data():
+    """Load bundled One Vision job codes and spare parts into PostgreSQL once."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    job_file = os.path.join(base_dir, 'job_codes_master.xlsx')
+    parts_file = os.path.join(base_dir, 'parts_master.xlsx')
+
+    if JobCodeMaster.query.count() == 0:
+        if not os.path.exists(job_file):
+            app.logger.warning('Job-code master file not found: %s', job_file)
+        else:
+            rows = read_local_excel_sheet(job_file, 'Job Code Master')
+            if rows:
+                headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+                def val(row, name):
+                    i = headers.get(name.casefold())
+                    return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+                seen = set()
+                for row in rows[1:]:
+                    code = val(row, 'Job Code').upper()
+                    code_type = val(row, 'Job Code Type')
+                    if not code or code in seen or code_type.casefold() not in {'machinery', 'service'}:
+                        continue
+                    seen.add(code)
+                    db.session.add(JobCodeMaster(
+                        job_code=code,
+                        description=val(row, 'Job Code Description'),
+                        job_code_type=code_type,
+                        component_code=val(row, 'Component Code'),
+                        repair_type=val(row, 'Repair Type'),
+                        damage_location=val(row, 'Damage Location'),
+                        damage_type=val(row, 'Damage Type'),
+                        material_type=val(row, 'Material Type')
+                    ))
+                db.session.commit()
+                app.logger.info('Loaded %s One Vision job codes', len(seen))
+
+    model_files = {
+        'PrimeLine': 'Primeline.xlsx',
+        'OptimaLine': 'Optimaline.xlsx',
+        'StarCool': 'Starcool.xlsx',
+        'ThinLINE': 'Thinline.xlsx',
+        'EliteLINE': 'Eliteline.xlsx',
+        'NaturaLINE': 'Naturaline.xlsx',
     }
-    .autocomplete-results {
-      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px);
-      z-index: 5000; max-height: 260px; overflow-y: auto;
-      background: #fff; border: 1px solid #aaa; border-radius: 4px;
-      box-shadow: 0 5px 14px rgba(0,0,0,.14);
-    }
-    .autocomplete-results.open { display: block; }
-    .autocomplete-item {
-      padding: 9px 10px; cursor: pointer; border-bottom: 1px solid #eee;
-      font-size: 14px; line-height: 1.3;
-    }
-    .autocomplete-item:last-child { border-bottom: 0; }
-    .autocomplete-item:hover, .autocomplete-item.active { background: #eef6ff; }
-    .autocomplete-empty { padding: 9px 10px; color: #666; font-size: 13px; }
-    .job-section { overflow: visible; }
 
+    # The six model-specific masters are the source for both parts and First Hour labor.
+    # No OneDrive or monthly parts workbook is required.
+    if SparePartMaster.query.count() == 0 or LaborRuleMaster.query.count() == 0:
+        existing_parts = {p.part_number for p in SparePartMaster.query.all()}
+        existing_rules = {(r.model_family, r.part_number, r.damage_code, r.repair_code)
+                          for r in LaborRuleMaster.query.all()}
+        parts_added = 0
+        rules_added = 0
+        for model_family, filename in model_files.items():
+            file_path = os.path.join(base_dir, filename)
+            if not os.path.exists(file_path):
+                app.logger.warning('Model labor master not found: %s', file_path)
+                continue
+            rows = read_local_excel_sheet(file_path, 'Export')
+            if not rows:
+                continue
+            headers = {str(v).strip().casefold(): i for i, v in enumerate(rows[0])}
+            def val(row, name):
+                i = headers.get(name.casefold())
+                return str(row[i]).strip() if i is not None and i < len(row) and row[i] is not None else ''
+            for row in rows[1:]:
+                part_number = val(row, 'part_code').upper()
+                description = val(row, 'Part_Description')
+                damage_code = val(row, 'DamageCode').upper()
+                repair_code = val(row, 'RepairCode').upper()
+                repair_description = val(row, 'Repair_description')
 
-    /* Clean mobile photo picker */
-    .photo-section .photo-container {
-      display: block;
-      margin: 12px 0 18px;
-    }
-    .photo-section .photo-input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 12px;
-      border: 1px solid #d8d8d8;
-      border-radius: 8px;
-      background: #fff;
-    }
-    .photo-section .photo-input::file-selector-button {
-      border: 0;
-      border-radius: 7px;
-      padding: 10px 16px;
-      margin-right: 12px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .photo-selection-count {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #666;
-    }
+                if not part_number:
+                    continue
 
-</style>
-</head>
-<body>
-<header>
-    <button onclick="logout()" style="float:right; margin-right:10px; background-color:#990000; color:white; border:none; padding:5px 10px; cursor:pointer;">
-      Logout
-    </button>REMS – Reefer Equipment Maintenance System</header>
-<main>
-<section id="repairListView">
-  <div class="view-toolbar">
-    <h2>Repair List</h2>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-      <button class="secondary-button" type="button" onclick="openManualReport()">New Report – Reefer Not on List</button>
-      <button class="secondary-button" type="button" onclick="loadRepairList()">Refresh</button>
-    </div>
-  </div>
-  <div id="repairListStatus" class="list-message">Loading repair list...</div>
-  <div id="repairListTableWrap" class="table-wrap" hidden>
-    <table class="repair-table">
-      <thead><tr><th>Container</th><th>History</th><th>Order Temp</th><th>Position</th><th>Alarm(s)</th><th>ETD</th><th>Vessel</th><th>Requested Repair</th><th>Remarks</th></tr></thead>
-      <tbody id="repairListBody"></tbody>
-    </table>
-  </div>
-</section>
-<section id="reportView">
-<div class="view-toolbar">
-  <h2>Repair Report</h2>
-  <button class="secondary-button" type="button" onclick="showRepairList()">← Back to Repair List</button>
-</div>
-<form id="repairForm">
-<label for="containernr">CONTAINERNR</label><input id="containernr" name="containernr" oninput="this.value = this.value.toUpperCase()" pattern="^[A-Z]{4}[0-9]{7}$" required="" title="Must be 4 letters followed by 7 digits (e.g., MSDU9823150)" type="text"/>
-<label for="datum">DATUM (Date)</label><input id="datum" name="datum" required="" type="date">
-<label for="naam">NAAM (Technician Name)</label><input id="naam" name="naam" readonly="" required="" type="text"/>
-<label for="model">MODEL NR</label><input id="model" name="model" required="" type="text"/>
-<label for="model_family">MODEL FAMILY</label>
-<select id="model_family" name="model_family" required>
-  <option value="">Select model family</option>
-  <option value="PrimeLine">PrimeLine</option>
-  <option value="OptimaLine">OptimaLine</option>
-  <option value="StarCool">StarCool</option>
-  <option value="ThinLINE">ThinLINE</option>
-  <option value="EliteLINE">EliteLINE</option>
-  <option value="NaturaLINE">NaturaLINE</option>
-</select>
-<label for="serienr">SERIENR.</label><input id="serienr" name="serienr" required="" type="text"/>
-<label for="warranty_id">WARRANTY ID NR</label><input id="warranty_id" name="warranty_id" required="" type="text"/>
-<label for="garantie">GARANTIE</label><input id="garantie" name="garantie" required="" type="text"/>
-<label for="setpoint">SETPOINT °C</label><input id="setpoint" name="setpoint" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="vents">VENTS</label><input id="vents" name="vents" required="" type="text"/>
-<label for="hum">HUM</label><input id="hum" name="hum" required="" type="text"/>
-<label for="ambient">AMBIENT °C</label><input id="ambient" name="ambient" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="supply_voor">SUPPLY VOOR °C</label><input id="supply_voor" name="supply_voor" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="supply_na">SUPPLY NA °C</label><input id="supply_na" name="supply_na" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="return_voor">RETURN VOOR °C</label><input id="return_voor" name="return_voor" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="return_na">RETURN NA °C</label><input id="return_na" name="return_na" required="" type="text" oninput="validateTemperatureInput(this)"/>
-<label for="temp_in_range">TEMPERATUUR IN-RANGE NA REPAIR</label><input id="temp_in_range" name="temp_in_range" required="" type="text"/>
-<label for="afmelding">AFMELDING</label>
-<select id="afmelding" name="afmelding" required>
-<option value="">Select</option>
-<option value="Ja">Ja</option>
-<option value="Nee">Nee</option>
-</select>
-<label class="full-width" for="probleem">OMSCHRIJVING / PROBLEEM</label><textarea class="full-width" id="probleem" name="probleem" required="" rows="3"></textarea>
-<label class="full-width" for="opmerkingen">OPMERKINGEN</label><textarea class="full-width" id="opmerkingen" name="opmerkingen" required="" rows="3"></textarea>
-<div class="full-width" id="photosSection">
-<fieldset>
-<legend>Photos</legend>
-<div class="photo-section">
-  <label>Fotos VOOR</label>
-  <div id="fotos_voor">
-    <div class="photo-container">
-      <input class="photo-input" name="fotos_voor" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
-      <img class="photo-preview">
-      <div class="compression-info"></div>
-    
-    </div>
-  </div>
-</div>
-<div class="photo-section">
-  <label>Fotos NA</label>
-  <div id="fotos_na">
-    <div class="photo-container">
-      <input class="photo-input" name="fotos_na" required type="file" accept="image/*" onchange="handleImageUpload(this)" multiple>
-      <img class="photo-preview">
-      <div class="compression-info"></div>
-    
-    </div>
-  </div>
-</div>
-</fieldset>
-</div>
-<div class="full-width" id="alarmContainer">
-<fieldset><legend>Alarms</legend></fieldset>
-<button class="add-button" onclick="addAlarm()" type="button">Add Alarm</button>
-</div>
-<div class="full-width" id="jobContainer">
-<fieldset><legend>Job Tasks</legend></fieldset>
-<button class="add-button" onclick="addJob()" type="button">Add Job</button><button class="add-button" onclick="addUndefinedJob()" type="button">Add Undefined Job</button>
-</div>
-<button class="full-width" type="submit" id="submitButton">Submit Report</button>
-</form>
-</section>
-</main>
-<div id="historyModal" onclick="if(event.target === this) closeHistory()">
-  <div class="history-dialog" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
-    <div class="history-header"><h2 id="historyTitle">Repair History</h2><button type="button" class="history-close" onclick="closeHistory()" aria-label="Close">×</button></div>
-    <div id="historyContent">Loading history...</div>
-  </div>
-</div>
-<div id="containerActionModal" onclick="if(event.target === this) closeContainerActions()">
-  <div class="action-dialog" role="dialog" aria-modal="true" aria-labelledby="containerActionTitle">
-    <div class="history-header"><h2 id="containerActionTitle">Choose Action</h2><button type="button" class="history-close" onclick="closeContainerActions()" aria-label="Close">×</button></div>
-    <div class="action-body">
-      <p id="containerActionText"></p>
-      <div class="action-buttons">
-        <button type="button" class="action-button report-action" onclick="continueToReport()">Create New Report</button>
-        <button type="button" class="action-button zone-action" onclick="openRepairZoneForm()">Request Repair Zone</button>
-        <button type="button" class="action-button cancel-action" onclick="closeContainerActions()">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
-<div id="repairZoneModal" onclick="if(event.target === this) closeRepairZoneForm()">
-  <div class="action-dialog" role="dialog" aria-modal="true" aria-labelledby="repairZoneTitle">
-    <div class="history-header"><h2 id="repairZoneTitle">Request Repair Zone</h2><button type="button" class="history-close" onclick="closeRepairZoneForm()" aria-label="Close">×</button></div>
-    <form class="action-body" onsubmit="submitRepairZoneRequest(event)">
-      <p id="repairZoneContainer"></p>
-      <label for="repairZonePosition"><strong>Current Position</strong></label>
-      <input id="repairZonePosition" autocomplete="off" required placeholder="Example: 2556/O" />
-      <p id="repairZoneError"></p>
-      <div class="action-buttons">
-        <button id="repairZoneSubmit" type="submit" class="action-button zone-action">Send Request</button>
-        <button type="button" class="action-button cancel-action" onclick="closeRepairZoneForm()">Cancel</button>
-      </div>
-    </form>
-  </div>
-</div>
-<div id="loginOverlay">
-<div id="loginBox">
-<h3>Login</h3>
-<input id="username" placeholder="Username" type="text"/>
-<input id="password" placeholder="Password" type="password"/>
-<div id="loginError">Invalid credentials</div>
-<button onclick="validateLogin()">Login</button>
-</div>
-</div>
+                # Reject malformed workbook rows instead of letting corrupted cell
+                # contents break PostgreSQL during application startup.
+                if len(part_number) > 100:
+                    app.logger.warning(
+                        "Skipping malformed part number in %s: length=%s, starts_with=%r",
+                        filename, len(part_number), part_number[:80]
+                    )
+                    continue
+                if len(damage_code) > 50 or len(repair_code) > 50:
+                    app.logger.warning(
+                        "Skipping malformed labor rule in %s for part %s",
+                        filename, part_number
+                    )
+                    continue
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-let selectedContainerNumber = '';
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
-}
+                description = description[:5000]
+                repair_description = repair_description[:5000]
+                if part_number not in existing_parts:
+                    db.session.add(SparePartMaster(
+                        part_number=part_number, replaced_by='', description=description, max_qty=''
+                    ))
+                    existing_parts.add(part_number)
+                    parts_added += 1
+                first_hour_text = val(row, 'FirstHour')
+                try:
+                    first_hour = float(first_hour_text or 0)
+                except (TypeError, ValueError):
+                    first_hour = 0.0
+                rule_key = (model_family, part_number, damage_code, repair_code)
+                if rule_key not in existing_rules:
+                    db.session.add(LaborRuleMaster(
+                        model_family=model_family,
+                        part_number=part_number,
+                        part_description=description,
+                        damage_code=damage_code,
+                        repair_code=repair_code,
+                        repair_description=repair_description,
+                        first_hour=first_hour
+                    ))
+                    existing_rules.add(rule_key)
+                    rules_added += 1
+            db.session.flush()
+        db.session.commit()
+        app.logger.info('Loaded %s model spare parts and %s labor rules', parts_added, rules_added)
 
-async function loadRepairList() {
-  const status = document.getElementById('repairListStatus');
-  const wrap = document.getElementById('repairListTableWrap');
-  status.hidden = false;
-  status.textContent = 'Loading repair list...';
-  wrap.hidden = true;
-  try {
-    const response = await fetch('/api/repair-list');
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Could not load repair list');
-    const body = document.getElementById('repairListBody');
-    body.innerHTML = result.items.map(item => `<tr>
-      <td><button type="button" class="container-link" data-container="${escapeHtml(item.container_number)}" onclick="openContainerActions(this.dataset.container)">${escapeHtml(item.container_number)}</button></td>
-      <td>${item.history_count ? `<button type="button" class="history-button" data-container="${escapeHtml(item.container_number)}" onclick="openHistory(this.dataset.container)" title="View repair history" aria-label="View ${Number(item.history_count)} previous repair report${Number(item.history_count) === 1 ? '' : 's'}">${Number(item.history_count)}</button>` : ''}</td>
-      <td>${escapeHtml(item.order_temp)}</td><td>${escapeHtml(item.position)}</td><td>${escapeHtml(item.alarms)}</td>
-      <td>${escapeHtml(item.etd)}</td><td>${escapeHtml(item.vessel)}</td><td>${escapeHtml(item.requested_repair)}</td><td>${escapeHtml(item.remarks)}</td>
-    </tr>`).join('');
-    if (!result.items.length) {
-      status.textContent = 'No reefers are currently waiting for repair.';
-    } else {
-      status.hidden = true;
-      wrap.hidden = false;
-    }
-  } catch (error) {
-    status.textContent = 'Could not load the repair list: ' + error.message;
-  }
-}
+# Initialize DB
+with app.app_context():
+    try:
+        db.create_all()
+        # Existing REMS databases may still have repair_jobs.quantity as INTEGER.
+        # PostgreSQL safely converts existing integer quantities to double precision.
+        try:
+            db.session.execute(text("ALTER TABLE repair_jobs ALTER COLUMN quantity TYPE DOUBLE PRECISION USING quantity::double precision"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
-async function openHistory(containerNumber) {
-  const modal = document.getElementById('historyModal');
-  const content = document.getElementById('historyContent');
-  document.getElementById('historyTitle').textContent = `Repair History – ${containerNumber}`;
-  content.textContent = 'Loading history...';
-  modal.style.display = 'block';
-  try {
-    const response = await fetch(`/api/report-history/${encodeURIComponent(containerNumber)}`);
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Could not load history');
-    content.innerHTML = result.history.map(report => {
-      const alarms = report.alarms.length ? report.alarms.map(escapeHtml).join(', ') : 'None recorded';
-      const jobs = report.jobs.length ? `<ul class="history-jobs">${report.jobs.map(job => {
-        const part = job.part_number ? ` — Part: ${escapeHtml(job.part_number)}${job.quantity ? ` × ${Number(job.quantity)}` : ''}` : '';
-        return `<li>${escapeHtml(job.job_code)} ${escapeHtml(job.description)}${part}${job.part_description ? ` (${escapeHtml(job.part_description)})` : ''}</li>`;
-      }).join('')}</ul>` : '<p>No job details recorded.</p>';
-      return `<article class="history-card">
-        <div class="history-meta">${escapeHtml(report.report_date)} · ${escapeHtml(report.technician_name)}</div>
-        <h4>Reported problem</h4><p>${escapeHtml(report.problem_description) || '—'}</p>
-        <h4>Alarm(s)</h4><p>${alarms}</p>
-        <h4>Work performed / parts used</h4>${jobs}
-        <h4>Comments</h4><p>${escapeHtml(report.comments) || '—'}</p>
-      </article>`;
-    }).join('') || '<div class="list-message">No reports found in the last 30 days.</div>';
-  } catch (error) {
-    content.textContent = 'Could not load history: ' + error.message;
-  }
-}
+        # Add fields introduced by the REMS One Vision workflow to existing databases.
+        try:
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS model_family VARCHAR(50)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS bottle_number VARCHAR(100)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS freon_sent_at TIMESTAMP"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
-function closeHistory() {
-  document.getElementById('historyModal').style.display = 'none';
-}
+        # Upgrade description columns on an existing REMS database before seeding.
+        try:
+            db.session.execute(text(
+                "ALTER TABLE labor_rule_master "
+                "ALTER COLUMN part_description TYPE TEXT, "
+                "ALTER COLUMN repair_description TYPE TEXT"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') {
-    closeHistory();
-    closeContainerActions();
-    closeRepairZoneForm();
-  }
-});
+        seed_master_data()
+        db.session.execute(text("SELECT 1"))
+        app.logger.info("Database initialized successfully")
+    except Exception as e:
+        app.logger.critical(f"Database initialization failed: {str(e)}")
+        raise
 
-function openContainerActions(containerNumber) {
-  selectedContainerNumber = containerNumber;
-  document.getElementById('containerActionText').textContent = `What do you want to do with ${containerNumber}?`;
-  document.getElementById('containerActionModal').style.display = 'block';
-}
+# ===================================
+# Routes
+# ===================================
 
-function closeContainerActions() {
-  document.getElementById('containerActionModal').style.display = 'none';
-}
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
 
-function continueToReport() {
-  const containerNumber = selectedContainerNumber;
-  closeContainerActions();
-  openRepairReport(containerNumber);
-}
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-function openRepairZoneForm() {
-  closeContainerActions();
-  document.getElementById('repairZoneContainer').innerHTML = `<strong>Container:</strong> ${escapeHtml(selectedContainerNumber)}`;
-  document.getElementById('repairZonePosition').value = '';
-  document.getElementById('repairZoneError').style.display = 'none';
-  document.getElementById('repairZoneModal').style.display = 'block';
-  setTimeout(() => document.getElementById('repairZonePosition').focus(), 0);
-}
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('static', path)
 
-function closeRepairZoneForm() {
-  document.getElementById('repairZoneModal').style.display = 'none';
-}
+# --------- LOGIN ROUTE ----------
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
 
-async function submitRepairZoneRequest(event) {
-  event.preventDefault();
-  const position = document.getElementById('repairZonePosition').value.trim().toUpperCase();
-  const technicianName = localStorage.getItem('loggedInUser') || document.getElementById('naam').value;
-  const submitButton = document.getElementById('repairZoneSubmit');
-  const errorText = document.getElementById('repairZoneError');
-  errorText.style.display = 'none';
-  submitButton.disabled = true;
-  submitButton.textContent = 'Sending...';
+    # Example ENV: TECHNICIANS="Admin:admin123,Brahim:bm123"
+    valid_users = {}
+    env_users = os.environ.get("TECHNICIANS", "")
+    for pair in env_users.split(","):
+        if ":" in pair:
+            user, pwd = pair.split(":", 1)
+            valid_users[user.strip()] = pwd.strip()
 
-  try {
-    const response = await fetch('/api/request-repair-zone', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        container_number: selectedContainerNumber,
-        technician_name: technicianName,
-        current_position: position
-      })
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Could not send the request');
-    closeRepairZoneForm();
-    alert(`✅ Repair-zone request sent for ${selectedContainerNumber}`);
-  } catch (error) {
-    errorText.textContent = error.message;
-    errorText.style.display = 'block';
-  } finally {
-    submitButton.disabled = false;
-    submitButton.textContent = 'Send Request';
-  }
-}
+    if username in valid_users and valid_users[username] == password:
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
-function prepareReport(containerNumber = '') {
-  const form = document.getElementById('repairForm');
-  const technicianName = localStorage.getItem('loggedInUser') || document.getElementById('naam').value;
-  form.reset();
-  document.getElementById('naam').value = technicianName;
-  document.getElementById('containernr').value = containerNumber;
-  document.getElementById('datum').value = new Date().toISOString().slice(0, 10);
-  document.querySelector('#jobContainer fieldset').innerHTML = '<legend>Job Tasks</legend>';
-  document.querySelector('#alarmContainer fieldset').innerHTML = '<legend>Alarms</legend>';
-  addJob();
-}
+# --------- MASTER DATA ----------
+@app.route('/api/job-codes', methods=['GET'])
+def search_job_codes():
+    q = str(request.args.get('q') or '').strip()
+    query = JobCodeMaster.query
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            JobCodeMaster.job_code.ilike(pattern),
+            JobCodeMaster.description.ilike(pattern)
+        ))
+    jobs = query.order_by(JobCodeMaster.job_code.asc()).limit(50).all()
+    results = [{
+        "id": job.job_code,
+        "text": f"{job.job_code} — {job.description}",
+        "code": job.job_code,
+        "description": job.description,
+        "type": job.job_code_type,
+        "component_code": job.component_code or "",
+        "repair_type": job.repair_type or "",
+        "material_type": job.material_type or ""
+    } for job in jobs]
 
-function openRepairReport(containerNumber) {
-  prepareReport(containerNumber);
-  document.getElementById('repairListView').style.display = 'none';
-  document.getElementById('reportView').style.display = 'block';
-  window.scrollTo({top: 0, behavior: 'smooth'});
-}
+    # REMS-only special job; no master-data/database change required.
+    if not q or "ice" in q.casefold() or "procedure" in q.casefold():
+        results.insert(0, {
+            "id": "ICE_PROCEDURE",
+            "text": "Ice Procedure",
+            "code": "ICE_PROCEDURE",
+            "description": "Ice Procedure",
+            "type": "special",
+            "component_code": "",
+            "repair_type": "",
+            "material_type": ""
+        })
 
-function openManualReport() {
-  prepareReport('');
-  document.getElementById('repairListView').style.display = 'none';
-  document.getElementById('reportView').style.display = 'block';
-  document.getElementById('containernr').focus();
-  window.scrollTo({top: 0, behavior: 'smooth'});
-}
+    return jsonify({"results": results[:50]})
 
-function showRepairList() {
-  document.getElementById('reportView').style.display = 'none';
-  document.getElementById('repairListView').style.display = 'block';
-  loadRepairList();
-  window.scrollTo({top: 0, behavior: 'smooth'});
-}
-document.addEventListener("DOMContentLoaded", function() {
-  const loggedInUser = localStorage.getItem("loggedInUser");
-  if (loggedInUser) {
-    document.getElementById('naam').value = loggedInUser;
-    document.getElementById('loginOverlay').style.display = 'none';
-    addJob(); // Initialize with one job section
-    loadRepairList();
-  } else {
-    document.getElementById('loginOverlay').style.display = 'flex';
-  }
-});
+@app.route('/api/parts', methods=['GET'])
+def search_spare_parts():
+    q = str(request.args.get('q') or '').strip()
+    model_family = str(request.args.get('model_family') or '').strip()
 
-async function validateLogin() {
-  const u = document.getElementById('username').value.trim();
-  const p = document.getElementById('password').value.trim();
+    # Parts are model-specific in REMS. Do not return a mixed list when
+    # no Model Family has been selected.
+    if not model_family:
+        return jsonify({"results": []})
 
-  try {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p })
-    });
+    # LaborRuleMaster is seeded from each model-specific Excel master and
+    # therefore tells us exactly which part numbers belong to each family.
+    model_part_numbers = (
+        db.session.query(LaborRuleMaster.part_number)
+        .filter(LaborRuleMaster.model_family == model_family)
+        .distinct()
+    )
 
-    const result = await response.json();
-    if (result.status === "success") {
-      document.getElementById('naam').value = u;
-      document.getElementById('loginOverlay').style.display = 'none';
-      localStorage.setItem("loggedInUser", u);
-      addJob();
-      loadRepairList();
-    } else {
-      document.getElementById('loginError').style.display = 'block';
-    }
-  } catch (err) {
-    alert("Login failed: " + err.message);
-  }
-}
+    query = SparePartMaster.query.filter(
+        SparePartMaster.part_number.in_(model_part_numbers)
+    )
 
-function logout() {
-  localStorage.removeItem("loggedInUser");
-  location.reload();
-}
-const MAX_WIDTH = 1024;
-const MAX_HEIGHT = 1024;
-const QUALITY = 0.7;
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(or_(
+            SparePartMaster.part_number.ilike(pattern),
+            SparePartMaster.description.ilike(pattern),
+            SparePartMaster.replaced_by.ilike(pattern)
+        ))
 
-function validateTemperatureInput(input) {
-  // Remove any characters that aren't numbers, minus sign, or dot
-  input.value = input.value.replace(/[^0-9\-.]/g, '');
-  
-  // Validate the format (only one minus sign at start, only one decimal point)
-  const value = input.value;
-  let isValid = true;
-  
-  // Check for multiple minus signs or minus in wrong position
-  if ((value.match(/-/g) || []).length > 1 || (value.indexOf('-') > 0)) {
-    isValid = false;
-  }
-  
-  // Check for multiple decimal points
-  if ((value.match(/\./g) || []).length > 1) {
-    isValid = false;
-  }
-  
-  // Highlight invalid inputs
-  if (!isValid || (value && !/^-?\d*\.?\d*$/.test(value))) {
-    input.classList.add('invalid-temp');
-  } else {
-    input.classList.remove('invalid-temp');
-  }
-  
-  return isValid;
-}
+    parts = query.order_by(SparePartMaster.part_number.asc()).limit(50).all()
+    return jsonify({"results": [{
+        "id": part.part_number,
+        "text": f"{part.part_number} — {part.description or ''}",
+        "part_number": part.part_number,
+        "description": part.description or "",
+        "replaced_by": part.replaced_by or "",
+        "max_qty": part.max_qty or ""
+    } for part in parts]})
 
-function addJob() {
-  const container = document.querySelector("#jobContainer fieldset");
-  const fieldset = document.createElement("fieldset");
-  fieldset.classList.add("job-section");
+@app.route('/api/labor-hours', methods=['GET'])
+def get_labor_hours():
+    model_text = str(request.args.get('model') or '').strip().casefold()
+    part_number = str(request.args.get('part_number') or '').strip().upper()
+    repair_code = str(request.args.get('repair_code') or '').strip().upper()
+    quantity_text = str(request.args.get('quantity') or '1').strip()
+    try:
+        quantity = float(quantity_text or 1)
+    except ValueError:
+        quantity = 1.0
 
-  fieldset.innerHTML = `
-    <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
+    aliases = [
+        ('optimaline', 'OptimaLine'), ('optima line', 'OptimaLine'),
+        ('primeline', 'PrimeLine'), ('prime line', 'PrimeLine'),
+        ('starcool', 'StarCool'), ('star cool', 'StarCool'),
+        ('thinline', 'ThinLINE'), ('thin line', 'ThinLINE'),
+        ('eliteline', 'EliteLINE'), ('elite line', 'EliteLINE'),
+        ('naturaline', 'NaturaLINE'), ('natura line', 'NaturaLINE'),
+    ]
+    model_family = next((family for alias, family in aliases if alias in model_text), '')
+    if not model_family or not part_number:
+        return jsonify({'status': 'not_found', 'first_hour': 0, 'labor_hours': 0})
 
-    <label>Job / Repair Performed</label>
-    <div class="autocomplete-wrap">
-      <input type="text" class="autocomplete-input job-autocomplete"
-             autocomplete="off" placeholder="Type job code or repair description" required>
-      <div class="autocomplete-results"></div>
-    </div>
-    <input type="hidden" name="job_description[]">
-    <input type="hidden" name="job_code[]">
-    <input type="hidden" name="repair_type[]">
+    query = LaborRuleMaster.query.filter_by(model_family=model_family, part_number=part_number)
+    # Current REMS/One Vision rule: Damage Type is always Broken (BR).
+    broken = query.filter(LaborRuleMaster.damage_code == 'BR')
+    if repair_code:
+        exact = broken.filter(LaborRuleMaster.repair_code == repair_code).first()
+        rule = exact or broken.first()
+    else:
+        rule = broken.first()
+    if rule is None:
+        rule = query.first()
+    if rule is None:
+        return jsonify({'status': 'not_found', 'model_family': model_family, 'first_hour': 0, 'labor_hours': 0})
 
-    <div class="ice-procedure-fields" style="display:none">
-      <div style="background:#eef6ff;border:1px solid #b8d7f5;border-radius:6px;padding:12px;margin:8px 0 14px;">
-        <strong style="display:block;color:#003366;margin-bottom:10px;">Ice Procedure</strong>
-        <label>CD26 / Value</label>
-        <input type="text" name="ice_cd26[]" autocomplete="off">
-        <label>CD27</label>
-        <select name="ice_cd27[]"><option value="">Select</option><option value="PuLs">PuLs</option><option value="AuTo">AuTo</option></select>
-        <label>Drain hose</label>
-        <select name="ice_drain_hose[]"><option value="">Select</option><option value="Dry">Dry</option><option value="Wet">Wet</option></select>
-        <label>Upper supply sensor</label>
-        <select name="ice_upper_supply_sensor[]"><option value="">Select</option><option value="Free">Free</option><option value="Stuck">Stuck</option></select>
-        <label>Lower supply sensor</label>
-        <select name="ice_lower_supply_sensor[]"><option value="">Select</option><option value="Free">Free</option><option value="Stuck">Stuck</option></select>
-        <label>Alarm Active</label>
-        <select name="ice_alarm_active[]" onchange="toggleIceAlarm(this)"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
-        <div class="ice-alarm-entry" style="display:none">
-          <label>Alarm</label>
-          <input type="text" name="ice_alarm[]" placeholder="Enter active alarm" autocomplete="off">
+    labor_hours = round((rule.first_hour or 0) * quantity, 2)
+    is_cable = 'cable' in (rule.part_description or '').casefold()
+    return jsonify({
+        'status': 'success',
+        'model_family': model_family,
+        'first_hour': rule.first_hour or 0,
+        'labor_hours': labor_hours,
+        'repair_code': rule.repair_code or '',
+        'is_cable': is_cable,
+        'quantity_note': '1 roll = 18 m' if is_cable else ''
+    })
+
+# --------- REPAIR LIST ----------
+@app.route('/api/repair-list', methods=['GET'])
+def get_repair_list():
+    excel_share_url = os.environ.get('EXCEL_SHARE_URL', '').strip()
+    if excel_share_url:
+        try:
+            items = read_repair_list_from_excel(excel_share_url)
+            add_recent_history_counts(items)
+            return jsonify({"status": "success", "items": items, "source": "excel"})
+        except Exception as exc:
+            app.logger.error("Excel repair-list sync failed: %s", exc, exc_info=True)
+
+    # Keep REMS usable if OneDrive is temporarily unavailable or not configured.
+    items = RepairListItem.query.order_by(RepairListItem.created_at.asc()).all()
+    item_data = [item.to_dict() for item in items]
+    add_recent_history_counts(item_data)
+    return jsonify({"status": "success", "items": item_data, "source": "database"})
+
+@app.route('/api/report-history/<string:container_nr>', methods=['GET'])
+def get_report_history(container_nr):
+    container_nr = container_nr.strip().upper()
+    cutoff_date = (datetime.utcnow() - timedelta(days=30)).date()
+    reports = RepairReport.query.filter(
+        RepairReport.container_number == container_nr,
+        RepairReport.report_date >= cutoff_date
+    ).order_by(RepairReport.report_date.desc(), RepairReport.id.desc()).all()
+
+    history = []
+    for report in reports:
+        jobs = RepairJob.query.filter_by(report_id=report.id).order_by(RepairJob.id.asc()).all()
+        alarms = Alarm.query.filter_by(report_id=report.id).order_by(Alarm.id.asc()).all()
+        history.append({
+            "id": report.id,
+            "report_date": report.report_date.strftime('%d/%m/%Y'),
+            "technician_name": report.technician_name or "",
+            "problem_description": report.problem_description or "",
+            "comments": report.comments or "",
+            "alarms": [alarm.alarm_code for alarm in alarms if alarm.alarm_code],
+            "jobs": [{
+                "job_code": job.job_code or "",
+                "description": job.description or "",
+                "part_number": job.part_number or "",
+                "part_description": job.part_description or "",
+                "quantity": job.quantity or 0
+            } for job in jobs]
+        })
+    return jsonify({"status": "success", "container_number": container_nr, "history": history})
+
+@app.route('/api/repair-list', methods=['POST'])
+def upsert_repair_list_item():
+    """Create/update a work item. The existing email automation can call this endpoint."""
+    data = request.get_json(silent=True) or request.form
+    container_nr = str(data.get('container_number') or data.get('containernr') or '').strip().upper()
+    if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+        return jsonify({"status": "error", "message": "Invalid container number format"}), 400
+
+    item = RepairListItem.query.filter_by(container_number=container_nr).first()
+    if item is None:
+        item = RepairListItem(container_number=container_nr)
+        db.session.add(item)
+
+    for field in ('order_temp', 'position', 'alarms', 'etd', 'vessel', 'requested_repair', 'remarks'):
+        if field in data:
+            setattr(item, field, str(data.get(field) or '').strip())
+
+    db.session.commit()
+    return jsonify({"status": "success", "item": item.to_dict()}), 200
+
+@app.route('/api/repair-list/<string:container_nr>', methods=['DELETE'])
+def delete_repair_list_item(container_nr):
+    item = RepairListItem.query.filter_by(container_number=container_nr.strip().upper()).first()
+    if item is None:
+        return jsonify({"status": "error", "message": "Container not found"}), 404
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"status": "success"})
+
+@app.route('/api/request-repair-zone', methods=['POST'])
+def request_repair_zone():
+    data = request.get_json(silent=True) or {}
+    container_nr = str(data.get('container_number') or '').strip().upper()
+    technician_name = str(data.get('technician_name') or '').strip()
+    current_position = str(data.get('current_position') or '').strip()
+
+    if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+        return jsonify({"status": "error", "message": "Invalid container number format"}), 400
+    if not technician_name:
+        return jsonify({"status": "error", "message": "Technician name is required"}), 400
+    if not current_position:
+        return jsonify({"status": "error", "message": "Current position is required"}), 400
+
+    duplicate_since = datetime.utcnow() - timedelta(minutes=15)
+    duplicate = RepairZoneRequest.query.filter(
+        RepairZoneRequest.container_number == container_nr,
+        RepairZoneRequest.created_at >= duplicate_since
+    ).first()
+    if duplicate:
+        return jsonify({
+            "status": "error",
+            "message": "A repair-zone request for this reefer was already sent in the last 15 minutes"
+        }), 409
+
+    request_record = RepairZoneRequest(
+        container_number=container_nr,
+        technician_name=technician_name,
+        current_position=current_position
+    )
+    db.session.add(request_record)
+
+    try:
+        send_repair_zone_email(container_nr, technician_name, current_position)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.error("Repair-zone email failed: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "message": "The request email could not be sent"}), 502
+
+    return jsonify({
+        "status": "success",
+        "message": f"Repair-zone request sent for {container_nr}"
+    })
+
+# --------- SUBMIT REPORT ----------
+@app.route('/api/submit', methods=['POST'])
+def submit_report():
+    try:
+        if not request.is_json and not request.form:
+            return jsonify({"status": "error", "message": "Unsupported content type"}), 415
+
+        form_data = request.form if request.form else request.get_json()
+        files = request.files
+
+        # Validate container number
+        container_nr = form_data.get('containernr', '')
+        if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
+            return jsonify({"status": "error", "message": "Invalid container number format"}), 400
+
+        # Create Repair Report
+        report = RepairReport(
+            container_number=container_nr,
+            report_date=datetime.strptime(form_data.get('datum'), '%Y-%m-%d').date(),
+            technician_name=form_data.get('naam'),
+            model=form_data.get('model'),
+            model_family=form_data.get('model_family'),
+            serial_number=form_data.get('serienr'),
+            warranty_id=form_data.get('warranty_id'),
+            warranty_status=form_data.get('garantie'),
+            setpoint=float(form_data.get('setpoint', 0)),
+            vents=form_data.get('vents'),
+            humidity=form_data.get('hum'),
+            ambient_temp=float(form_data.get('ambient', 0)),
+            supply_temp_before=float(form_data.get('supply_voor', 0)),
+            supply_temp_after=float(form_data.get('supply_na', 0)),
+            return_temp_before=float(form_data.get('return_voor', 0)),
+            return_temp_after=float(form_data.get('return_na', 0)),
+            temp_in_range=form_data.get('temp_in_range'),
+            problem_description=form_data.get('probleem'),
+            comments=form_data.get('opmerkingen')
+        )
+        db.session.add(report)
+        db.session.flush()  # Get report ID
+
+        # Jobs
+        # Ice Procedure is email-only and is not stored in repair_jobs.
+        job_count = int(form_data.get('job_count', 0))
+        ice_procedures = []
+        for i in range(job_count):
+            job_code = str(form_data.get(f'job[{i}][code]') or '').strip().upper()
+
+            if job_code == 'ICE_PROCEDURE':
+                alarm_active = str(form_data.get(f'job[{i}][ice_alarm_active]') or '').strip()
+                ice_alarm = str(form_data.get(f'job[{i}][ice_alarm]') or '').strip()
+                ice_data = {
+                    'cd26': str(form_data.get(f'job[{i}][ice_cd26]') or '').strip(),
+                    'cd27': str(form_data.get(f'job[{i}][ice_cd27]') or '').strip(),
+                    'drain_hose': str(form_data.get(f'job[{i}][ice_drain_hose]') or '').strip(),
+                    'upper_supply_sensor': str(form_data.get(f'job[{i}][ice_upper_supply_sensor]') or '').strip(),
+                    'lower_supply_sensor': str(form_data.get(f'job[{i}][ice_lower_supply_sensor]') or '').strip(),
+                    'alarm_active': alarm_active,
+                    'alarm': ice_alarm
+                }
+                if not all([
+                    ice_data['cd26'], ice_data['cd27'], ice_data['drain_hose'],
+                    ice_data['upper_supply_sensor'], ice_data['lower_supply_sensor'],
+                    ice_data['alarm_active']
+                ]):
+                    return jsonify({"status": "error", "message": "Please complete all Ice Procedure fields"}), 400
+                if alarm_active.casefold() == 'yes' and not ice_alarm:
+                    return jsonify({"status": "error", "message": "Please enter the active alarm for the Ice Procedure"}), 400
+                ice_procedures.append(ice_data)
+                continue
+
+            job = RepairJob(
+                report_id=report.id,
+                job_code=form_data.get(f'job[{i}][code]'),
+                description=form_data.get(f'job[{i}][description]'),
+                part_number=form_data.get(f'job[{i}][part_number]'),
+                part_description=form_data.get(f'job[{i}][part_description]'),
+                quantity=float(form_data.get(f'job[{i}][quantity]') or 1),
+                damage_type=form_data.get(f'job[{i}][damage_type]'),
+                old_serial=form_data.get(f'job[{i}][old_serial]'),
+                new_serial=form_data.get(f'job[{i}][new_serial]'),
+                bottle_number=form_data.get(f'job[{i}][bottle_number]'),
+                labor_hours=float(form_data.get(f'job[{i}][labor_hours]') or 0)
+            )
+            db.session.add(job)
+
+        # Alarms
+        for alarm in request.form.getlist('alarm[]'):
+            if alarm.strip():
+                db.session.add(Alarm(report_id=report.id, alarm_code=alarm.strip()))
+
+        # Files — save every selected photo and keep Before/After counts for the email.
+        saved_files = []
+        photo_counts = {"before": 0, "after": 0}
+        file_counter = 0
+        for file_key in files.keys():
+            for file in files.getlist(file_key):
+                if file and allowed_file(file.filename):
+                    original_name = secure_filename(file.filename)
+                    name, extension = os.path.splitext(original_name)
+                    filename = f"report_{report.id}_{file_counter}_{name}{extension}"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    saved_files.append(filepath)
+
+                    key_lower = str(file_key).lower()
+                    if "fotos_voor" in key_lower:
+                        photo_counts["before"] += 1
+                    elif "fotos_na" in key_lower:
+                        photo_counts["after"] += 1
+
+                    file_counter += 1
+
+        # Send Email
+        try:
+            # Get jobs and alarms for this report
+            jobs = RepairJob.query.filter_by(report_id=report.id).all()
+            alarms = Alarm.query.filter_by(report_id=report.id).all()
+            
+            send_email(
+                subject=container_nr,
+                body="Repair Report submitted", 
+                attachments=saved_files,
+                report=report,
+                jobs=jobs,
+                alarms=alarms,
+                afmelding=form_data.get("afmelding", ""),
+                photo_counts=photo_counts,
+                ice_procedures=ice_procedures
+            )
+        except Exception as e:
+            app.logger.error(f"Email failed: {str(e)}")
+
+        # A completed repair disappears from the technician work list.
+        # Incomplete reports (Afmelding = Nee) remain available for follow-up.
+        if str(form_data.get("afmelding", "")).strip().lower() == "ja":
+            RepairListItem.query.filter_by(container_number=container_nr.upper()).delete()
+
+        db.session.commit()
+        return jsonify({"status": "success", "message": "Report submitted successfully", "report_id": report.id})
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Submission failed: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+# ===================================
+# Helpers
+# ===================================
+def add_recent_history_counts(items):
+    container_numbers = {str(item.get('container_number', '')).strip().upper() for item in items}
+    container_numbers.discard('')
+    if not container_numbers:
+        return
+    cutoff_date = (datetime.utcnow() - timedelta(days=30)).date()
+    reports = RepairReport.query.with_entities(RepairReport.container_number).filter(
+        RepairReport.container_number.in_(container_numbers),
+        RepairReport.report_date >= cutoff_date
+    ).all()
+    counts = {}
+    for (container_number,) in reports:
+        key = (container_number or '').upper()
+        counts[key] = counts.get(key, 0) + 1
+    for item in items:
+        item['history_count'] = counts.get(str(item.get('container_number', '')).upper(), 0)
+
+def excel_column_index(cell_reference):
+    letters = re.match(r'[A-Z]+', cell_reference or '')
+    if not letters:
+        return 0
+    result = 0
+    for char in letters.group(0):
+        result = result * 26 + ord(char) - 64
+    return result - 1
+
+def excel_date_display(value):
+    try:
+        serial = float(value)
+        if serial <= 0:
+            return str(value or '')
+        date_value = datetime(1899, 12, 30) + __import__('datetime').timedelta(days=serial)
+        return date_value.strftime('%d/%m')
+    except (TypeError, ValueError, OverflowError):
+        return str(value or '').strip()
+
+def read_repair_list_from_excel(share_url):
+    """Download a view-only OneDrive workbook and read its first worksheet."""
+    parsed = urllib.parse.urlsplit(share_url)
+    query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+    query['download'] = '1'
+    download_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query), parsed.fragment))
+    request_obj = urllib.request.Request(download_url, headers={
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36',
+        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream;q=0.9,*/*;q=0.8'
+    })
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    with opener.open(request_obj, timeout=20) as response:
+        workbook_bytes = response.read(20 * 1024 * 1024 + 1)
+    if len(workbook_bytes) > 20 * 1024 * 1024:
+        raise ValueError('Excel file exceeds the 20 MB safety limit')
+    if not workbook_bytes.startswith(b'PK'):
+        raise ValueError('The sharing link did not return an Excel workbook')
+
+    spreadsheet_ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    relationship_ns = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    office_rel_ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+    with zipfile.ZipFile(io.BytesIO(workbook_bytes)) as archive:
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in archive.namelist():
+            shared_root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+            for item in shared_root.findall(f'{{{spreadsheet_ns}}}si'):
+                shared_strings.append(''.join(node.text or '' for node in item.iter(f'{{{spreadsheet_ns}}}t')))
+
+        workbook_root = ET.fromstring(archive.read('xl/workbook.xml'))
+        first_sheet = workbook_root.find(f'.//{{{spreadsheet_ns}}}sheet')
+        if first_sheet is None:
+            return []
+        relationship_id = first_sheet.attrib.get(f'{{{office_rel_ns}}}id')
+        rels_root = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
+        target = None
+        for relation in rels_root.findall(f'{{{relationship_ns}}}Relationship'):
+            if relation.attrib.get('Id') == relationship_id:
+                target = relation.attrib.get('Target')
+                break
+        if not target:
+            raise ValueError('Could not locate the Excel worksheet')
+        worksheet_path = target.lstrip('/') if target.startswith('/xl/') else 'xl/' + target.lstrip('/')
+        worksheet_path = worksheet_path.replace('xl/xl/', 'xl/')
+        sheet_root = ET.fromstring(archive.read(worksheet_path))
+
+        rows = []
+        for row in sheet_root.findall(f'.//{{{spreadsheet_ns}}}row'):
+            values = {}
+            for cell in row.findall(f'{{{spreadsheet_ns}}}c'):
+                column = excel_column_index(cell.attrib.get('r', ''))
+                cell_type = cell.attrib.get('t')
+                value_node = cell.find(f'{{{spreadsheet_ns}}}v')
+                if cell_type == 'inlineStr':
+                    inline = cell.find(f'{{{spreadsheet_ns}}}is')
+                    value = ''.join(node.text or '' for node in inline.iter(f'{{{spreadsheet_ns}}}t')) if inline is not None else ''
+                else:
+                    value = value_node.text if value_node is not None else ''
+                    if cell_type == 's' and value:
+                        value = shared_strings[int(value)]
+                values[column] = value
+            if values:
+                rows.append([values.get(i, '') for i in range(max(values) + 1)])
+
+    if not rows:
+        return []
+    headers = [str(header).strip() for header in rows[0]]
+    header_positions = {header.casefold(): index for index, header in enumerate(headers)}
+
+    def get_value(row, header):
+        index = header_positions.get(header.casefold())
+        return str(row[index]).strip() if index is not None and index < len(row) else ''
+
+    items = []
+    for row in rows[1:]:
+        container_number = get_value(row, 'Container nummer').upper()
+        if not container_number:
+            continue
+        items.append({
+            'container_number': container_number,
+            'order_temp': get_value(row, 'Order Temp'),
+            'position': get_value(row, 'Positie'),
+            'alarms': get_value(row, 'Alarm(en)'),
+            'etd': excel_date_display(get_value(row, 'Vertrek')),
+            'vessel': get_value(row, 'Vessel'),
+            'requested_repair': get_value(row, 'Gevraagd repair'),
+            'remarks': get_value(row, 'Opmerkingen')
+        })
+    return items
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
+
+def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None, ice_procedures=None):
+    """Create the original REMS email layout with the updated Job Tasks section."""
+    if not report:
+        return "<p>Repair Report submitted</p>"
+
+    def safe(value, fallback="N/A"):
+        if value is None or value == "":
+            return fallback
+        return html.escape(str(value))
+
+    def qty(value):
+        if value is None or value == "":
+            return "N/A"
+        try:
+            number = float(value)
+            return str(int(number)) if number.is_integer() else str(number)
+        except (TypeError, ValueError):
+            return safe(value)
+
+    afmelding_value = (afmelding or "").strip()
+    if afmelding_value.lower() == "nee":
+        afmelding_display = '<span style="color:#d60000;font-weight:bold;font-size:16px;">NEE</span>'
+    elif afmelding_value.lower() == "ja":
+        afmelding_display = '<span style="color:#168a2e;font-weight:bold;">JA</span>'
+    else:
+        afmelding_display = "N/A"
+
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .section {{ margin-bottom: 20px; }}
+            .section-title {{ font-weight: bold; font-size: 18px; margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h2>Repair Report for Container: {safe(report.container_number)}</h2>
+
+        <div class="section">
+            <div class="section-title">General Information</div>
+            <table>
+                <tr><th>Container Number</th><td>{safe(report.container_number)}</td></tr>
+                <tr><th>Date</th><td>{safe(report.report_date)}</td></tr>
+                <tr><th>Technician</th><td>{safe(report.technician_name)}</td></tr>
+                <tr><th>Model</th><td>{safe(report.model)}</td></tr>
+                <tr><th>Serial Number</th><td>{safe(report.serial_number)}</td></tr>
+                <tr><th>Warranty ID</th><td>{safe(report.warranty_id)}</td></tr>
+                <tr><th>Warranty Status</th><td>{safe(report.warranty_status)}</td></tr>
+            </table>
         </div>
-      </div>
-    </div>
-
-    <div class="standard-job-fields">
-    <label>Used Part</label>
-    <div class="autocomplete-wrap">
-      <input type="text" class="autocomplete-input part-autocomplete"
-             autocomplete="off" placeholder="Type part number or description (optional)">
-      <div class="autocomplete-results"></div>
-    </div>
-    <input type="hidden" name="part_number[]">
-    <input type="hidden" name="part_description[]">
-
-    </div>
-    <label>Quantity <span class="quantity-note" style="font-weight:normal;color:#666"></span></label>
-    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
-
-    <div class="standard-job-details">
-    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
-    <input type="text" name="serial_old[]">
-
-    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
-    <input type="text" name="serial_new[]">
-
-    </div>
-    <div class="refrigerant-bottle-field" style="display:none">
-      <label>Bottle nr</label>
-      <input type="text" name="bottle_number[]" autocomplete="off">
-    </div>
-
-    <label>Labor Hours</label>
-    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
-    <small class="labor-note" style="display:block;color:#666;margin-top:-6px;margin-bottom:8px">
-      Select Model Family above to calculate Labor Hours.
-    </small>
-
-    <input type="hidden" name="damage_type[]" value="BR">
-  `;
-
-  container.appendChild(fieldset);
-  initializeAutocomplete(fieldset);
-}
-
-function updateSerialRequirements(fieldset) {
-  const partDescription =
-    fieldset.querySelector('input[name="part_description[]"]')?.value?.trim().toLowerCase() || '';
-
-  // SNs mandatory only for these component groups.
-  const serialRequired =
-    /humidity/.test(partDescription) ||
-    /\bo2\b|o²|oxygen/.test(partDescription) ||
-    /\bco2\b|co²|carbon dioxide/.test(partDescription) ||
-    (
-      /(evaporator|condenser)/.test(partDescription) &&
-      /(fan|motor)/.test(partDescription)
-    ) ||
-    /(condenser.*coil|coil.*condenser)/.test(partDescription) ||
-    /\bcompressor\b/.test(partDescription);
-
-  const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
-  const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
-  const oldLabel = oldSerial?.previousElementSibling;
-  const newLabel = newSerial?.previousElementSibling;
-
-  if (oldSerial) oldSerial.required = serialRequired;
-  if (newSerial) newSerial.required = serialRequired;
-
-  if (oldLabel) {
-    oldLabel.innerHTML = serialRequired
-      ? 'Old Serial Number <span style="color:#b00020">*</span>'
-      : 'Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
-  }
-  if (newLabel) {
-    newLabel.innerHTML = serialRequired
-      ? 'New Serial Number <span style="color:#b00020">*</span>'
-      : 'New Serial Number <span style="font-weight:normal;color:#666">(optional)</span>';
-  }
-}
-
-function toggleIceAlarm(select) {
-  const fieldset = select.closest('.job-section');
-  const alarmEntry = fieldset?.querySelector('.ice-alarm-entry');
-  const alarmInput = fieldset?.querySelector('input[name="ice_alarm[]"]');
-  const isActive = select.value === 'Yes';
-  if (alarmEntry) alarmEntry.style.display = isActive ? '' : 'none';
-  if (alarmInput) {
-    alarmInput.required = isActive;
-    if (!isActive) alarmInput.value = '';
-  }
-}
-
-function applySpecialJobLayout(fieldset) {
-  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
-  const isRefrigerant = jobCode === 'E001II';
-  const isIceProcedure = jobCode === 'ICE_PROCEDURE';
-
-  const standardPart = fieldset.querySelector('.standard-job-fields');
-  const standardDetails = fieldset.querySelector('.standard-job-details');
-  const bottleField = fieldset.querySelector('.refrigerant-bottle-field');
-  const iceFields = fieldset.querySelector('.ice-procedure-fields');
-  const quantityInput = fieldset.querySelector('input[name="quantity[]"]');
-  const quantityLabel = quantityInput?.previousElementSibling;
-  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
-  const laborLabel = laborInput?.previousElementSibling;
-  const laborNote = fieldset.querySelector('.labor-note');
-
-  if (standardPart) standardPart.style.display = (isRefrigerant || isIceProcedure) ? 'none' : '';
-  if (standardDetails) standardDetails.style.display = (isRefrigerant || isIceProcedure) ? 'none' : '';
-  if (bottleField) bottleField.style.display = isRefrigerant ? '' : 'none';
-  if (iceFields) iceFields.style.display = isIceProcedure ? '' : 'none';
-  if (quantityInput) quantityInput.style.display = isIceProcedure ? 'none' : '';
-  if (quantityLabel) quantityLabel.style.display = isIceProcedure ? 'none' : '';
-  if (laborInput) laborInput.style.display = isIceProcedure ? 'none' : '';
-  if (laborLabel) laborLabel.style.display = isIceProcedure ? 'none' : '';
-  if (laborNote) laborNote.style.display = isIceProcedure ? 'none' : 'block';
-
-  [
-    'input[name="ice_cd26[]"]',
-    'select[name="ice_cd27[]"]',
-    'select[name="ice_drain_hose[]"]',
-    'select[name="ice_upper_supply_sensor[]"]',
-    'select[name="ice_lower_supply_sensor[]"]',
-    'select[name="ice_alarm_active[]"]'
-  ].forEach(selector => {
-    const input = fieldset.querySelector(selector);
-    if (input) input.required = isIceProcedure;
-  });
-
-  const alarmActive = fieldset.querySelector('select[name="ice_alarm_active[]"]');
-  if (alarmActive) toggleIceAlarm(alarmActive);
-
-  if (isIceProcedure) {
-    fieldset.querySelector('input[name="part_number[]"]').value = '';
-    fieldset.querySelector('input[name="part_description[]"]').value = '';
-    fieldset.querySelector('input[name="serial_old[]"]').value = '';
-    fieldset.querySelector('input[name="serial_new[]"]').value = '';
-    const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
-    if (bottle) bottle.value = '';
-    if (quantityInput) { quantityInput.required = false; quantityInput.value = '1'; }
-    if (laborInput) { laborInput.readOnly = true; laborInput.value = '0'; }
-    return;
-  }
-
-  if (quantityInput) quantityInput.required = true;
-
-  if (isRefrigerant) {
-    const oldSerial = fieldset.querySelector('input[name="serial_old[]"]');
-    const newSerial = fieldset.querySelector('input[name="serial_new[]"]');
-    if (oldSerial) oldSerial.required = false;
-    if (newSerial) newSerial.required = false;
-    fieldset.querySelector('input[name="part_number[]"]').value = '';
-    fieldset.querySelector('input[name="part_description[]"]').value = '';
-    fieldset.querySelector('input[name="serial_old[]"]').value = '';
-    fieldset.querySelector('input[name="serial_new[]"]').value = '';
-    laborInput.value = '0.5';
-    laborInput.readOnly = true;
-    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
-  } else {
-    laborInput.readOnly = false;
-    updateSerialRequirements(fieldset);
-    const bottle = fieldset.querySelector('input[name="bottle_number[]"]');
-    if (bottle) bottle.value = '';
-  }
-}
-
-function initializeAutocomplete(fieldset) {
-  setupAutocomplete(
-    fieldset,
-    '.job-autocomplete',
-    '/api/job-codes',
-    data => {
-      fieldset.querySelector('input[name="job_code[]"]').value = data.code || data.id || '';
-      fieldset.querySelector('input[name="job_description[]"]').value = data.description || '';
-      fieldset.querySelector('input[name="repair_type[]"]').value = data.repair_type || '';
-      applySpecialJobLayout(fieldset);
-      recalculateLabor(fieldset);
-    },
-    () => {
-      fieldset.querySelector('input[name="job_code[]"]').value = '';
-      fieldset.querySelector('input[name="job_description[]"]').value = '';
-      fieldset.querySelector('input[name="repair_type[]"]').value = '';
-      applySpecialJobLayout(fieldset);
-      recalculateLabor(fieldset);
-    }
-  );
-
-  setupAutocomplete(
-    fieldset,
-    '.part-autocomplete',
-    '/api/parts',
-    data => {
-      fieldset.querySelector('input[name="part_number[]"]').value = data.part_number || data.id || '';
-      fieldset.querySelector('input[name="part_description[]"]').value = data.description || '';
-      updateSerialRequirements(fieldset);
-      recalculateLabor(fieldset);
-    },
-    () => {
-      fieldset.querySelector('input[name="part_number[]"]').value = '';
-      fieldset.querySelector('input[name="part_description[]"]').value = '';
-      fieldset.querySelector('.quantity-note').textContent = '';
-      updateSerialRequirements(fieldset);
-      recalculateLabor(fieldset);
-    }
-  );
-
-  fieldset.querySelector('input[name="quantity[]"]')
-    .addEventListener('input', () => recalculateLabor(fieldset));
-}
-
-function setupAutocomplete(fieldset, selector, url, onSelect, onClear) {
-  const input = fieldset.querySelector(selector);
-  const results = input.parentElement.querySelector('.autocomplete-results');
-  let timer = null;
-  let requestId = 0;
-
-  const close = () => {
-    results.classList.remove('open');
-    results.innerHTML = '';
-  };
-
-  input.addEventListener('input', () => {
-    // Once the technician edits selected text, the previous selection is no longer valid.
-    onClear();
-    const q = input.value.trim();
-    clearTimeout(timer);
-
-    if (!q) {
-      close();
-      return;
-    }
-
-    timer = setTimeout(async () => {
-      const thisRequest = ++requestId;
-      try {
-        const response = await fetch(`${url}?q=${encodeURIComponent(q)}`);
-        const payload = await response.json();
-        if (thisRequest !== requestId) return;
-
-        const items = Array.isArray(payload) ? payload : (payload.results || []);
-        results.innerHTML = '';
-
-        if (!items.length) {
-          results.innerHTML = '<div class="autocomplete-empty">No matching results</div>';
-          results.classList.add('open');
-          return;
-        }
-
-        items.forEach(item => {
-          const row = document.createElement('div');
-          row.className = 'autocomplete-item';
-          row.textContent = item.text || item.description || item.id || '';
-          row.addEventListener('mousedown', event => {
-            event.preventDefault();
-            input.value = item.text || item.description || item.id || '';
-            close();
-            onSelect(item);
-          });
-          results.appendChild(row);
-        });
-        results.classList.add('open');
-      } catch (err) {
-        close();
-      }
-    }, 180);
-  });
-
-  input.addEventListener('focus', () => {
-    if (input.value.trim()) input.dispatchEvent(new Event('input'));
-  });
-
-  input.addEventListener('keydown', event => {
-    if ((event.key === 'Backspace' || event.key === 'Delete') && input.value === '') {
-      onClear();
-      close();
-    }
-    if (event.key === 'Escape') close();
-  });
-
-  input.addEventListener('blur', () => setTimeout(close, 120));
-}
-
-async function recalculateLabor(fieldset) {
-  const jobCode = fieldset.querySelector('input[name="job_code[]"]')?.value?.trim().toUpperCase() || '';
-  if (jobCode === 'ICE_PROCEDURE') {
-    const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
-    if (laborInput) {
-      laborInput.value = '0';
-      laborInput.readOnly = true;
-    }
-    return;
-  }
-
-  if (jobCode === 'E001II') {
-    const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
-    const laborNote = fieldset.querySelector('.labor-note');
-    if (laborInput) {
-      laborInput.value = '0.5';
-      laborInput.readOnly = true;
-    }
-    if (laborNote) laborNote.textContent = 'Fixed labor: 0.5 h';
-    return;
-  }
-
-  const model = document.getElementById('model_family')?.value?.trim() || '';
-  const partNumber = fieldset.querySelector('input[name="part_number[]"]')?.value?.trim() || '';
-  const repairCode = fieldset.querySelector('input[name="repair_type[]"]')?.value?.trim() || '';
-  const quantity = fieldset.querySelector('input[name="quantity[]"]')?.value || '1';
-  const laborInput = fieldset.querySelector('input[name="labor_hours[]"]');
-  const laborNote = fieldset.querySelector('.labor-note');
-  const quantityNote = fieldset.querySelector('.quantity-note');
-
-  if (!laborInput) return;
-
-  if (!model) {
-    laborInput.value = '0';
-    if (laborNote) laborNote.textContent = 'Select Model Family above to calculate Labor Hours.';
-    return;
-  }
-  if (!partNumber) {
-    laborInput.value = '0';
-    if (laborNote) laborNote.textContent = 'Select a Used Part to calculate Labor Hours.';
-    return;
-  }
-
-  if (laborNote) laborNote.textContent = 'Calculating Labor Hours...';
-
-  try {
-    const params = new URLSearchParams({
-      model,
-      part_number: partNumber,
-      repair_code: repairCode,
-      quantity
-    });
-    const response = await fetch('/api/labor-hours?' + params.toString());
-    const data = await response.json();
-
-    if (data.status === 'success') {
-      laborInput.value = Number(data.labor_hours || 0).toFixed(2).replace(/\.00$/, '');
-      if (laborNote) laborNote.textContent =
-        `Auto: ${data.first_hour} h × ${quantity} = ${data.labor_hours} h (${data.model_family})`;
-      if (quantityNote) quantityNote.textContent = data.is_cable ? '— 1 roll = 18 m' : '';
-    } else {
-      laborInput.value = '0';
-      if (laborNote) laborNote.textContent =
-        `No matching labor rule found for ${partNumber} (${model}). Enter Labor Hours manually.`;
-      if (quantityNote) quantityNote.textContent = '';
-    }
-  } catch (err) {
-    if (laborNote) laborNote.textContent =
-      'Automatic labor lookup unavailable — enter Labor Hours manually.';
-  }
-}
-
-['input', 'change'].forEach(eventName => {
-  document.getElementById('model_family')?.addEventListener(eventName, () => {
-    document.querySelectorAll('.job-section').forEach(section => recalculateLabor(section));
-  });
-});
-
-function addPhoto(sectionId) {
-  const container = document.getElementById(sectionId);
-  const photoCount = container.querySelectorAll('input[type="file"]').length;
-  
-  // Allow up to 10 photos per section.
-  if (photoCount >= 10) {
-    alert("Maximum 10 photos allowed per section");
-    return;
-  }
-
-  const div = document.createElement('div');
-  div.className = 'photo-container';
-  
-  div.innerHTML = `
-    <input class="photo-input" type="file" name="${sectionId}_extra" accept="image/*" onchange="handleImageUpload(this)">
-    <button type="button" onclick="removePhoto(this)" class="photo-remove-btn" title="Remove photo">×</button>
-    <img class="photo-preview">
-    <div class="compression-info"></div>
-  `;
-  container.appendChild(div);
-}
-
-function removePhoto(button) {
-  button.parentElement.remove();
-}
-
-function handleImageUpload(input) {
-  const files = Array.from(input.files || []);
-
-  if (files.length > 10) {
-    alert("Maximum 10 photos allowed");
-    input.value = "";
-    updatePhotoSelectionLabel(input);
-    return;
-  }
-
-  updatePhotoSelectionLabel(input);
-
-  const container = input.closest('.photo-container');
-  const preview = container?.querySelector('.photo-preview');
-  if (preview) {
-    if (files.length === 1) {
-      const reader = new FileReader();
-      reader.onload = e => {
-        preview.src = e.target.result;
-        preview.style.display = 'block';
-      };
-      reader.readAsDataURL(files[0]);
-    } else {
-      preview.removeAttribute('src');
-      preview.style.display = 'none';
-    }
-  }
-}
-
-function updatePhotoSelectionLabel(input) {
-  const container = input.closest('.photo-container');
-  if (!container) return;
-
-  let label = container.querySelector('.photo-selection-count');
-  if (!label) {
-    label = document.createElement('div');
-    label.className = 'photo-selection-count';
-    container.appendChild(label);
-  }
-
-  const count = input.files ? input.files.length : 0;
-  label.textContent = count ? `${count} photo${count === 1 ? '' : 's'} selected` : 'Select 2–10 photos';
-}
-
-function compressImage(file, callback) {
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      
-      // Calculate new dimensions while maintaining aspect ratio
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
-        }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width *= MAX_HEIGHT / height;
-          height = MAX_HEIGHT;
-        }
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      // Convert to compressed JPEG
-      canvas.toBlob(function(blob) {
-        if (!blob) {
-          callback(file, file.size);
-          return;
-        }
-        const originalBaseName = (file.name || 'photo').replace(/\.[^.]+$/, '');
-        const compressedFile = new File([blob], `${originalBaseName}.jpg`, {
-          type: 'image/jpeg',
-          lastModified: Date.now()
-        });
-        callback(compressedFile, file.size);
-      }, 'image/jpeg', QUALITY);
-    };
-    img.src = event.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function compressImagePromise(file) {
-  return new Promise((resolve) => {
-    compressImage(file, (compressedFile, originalSize) => {
-      resolve({ compressedFile, originalSize });
-    });
-  });
-}
-
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' bytes';
-  else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  else return (bytes / 1048576).toFixed(1) + ' MB';
-}
-
-function addAlarm() {
-  const container = document.querySelector("#alarmContainer fieldset");
-  const div = document.createElement('div');
-  div.className = 'alarm-input-container';
-  
-  div.innerHTML = `
-    <input type="text" name="alarm" placeholder="Alarm">
-    <button type="button" onclick="removeAlarm(this)" class="remove-btn">×</button>
-  `;
-  container.appendChild(div);
-}
-
-function removeAlarm(button) {
-  button.parentElement.remove();
-}
-
-function addUndefinedJob() {
-  const container = document.querySelector("#jobContainer fieldset");
-  const fieldset = document.createElement("fieldset");
-  fieldset.classList.add("job-section");
-
-  fieldset.innerHTML = `
-    <button type="button" onclick="removeJob(this)" class="remove-btn">×</button>
-    <label>Job Description</label>
-    <input type="text" name="job_description[]" required placeholder="Describe the repair performed">
-    <label>Job Code</label>
-    <input type="text" name="job_code[]" placeholder="Optional">
-    <label>Part Number</label>
-    <input type="text" name="part_number[]" placeholder="Optional">
-    <label>Part Description</label>
-    <input type="text" name="part_description[]" placeholder="Optional">
-    <label>Quantity</label>
-    <input type="number" name="quantity[]" min="0.01" step="0.01" value="1" required>
-    <label>Old Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
-    <input type="text" name="serial_old[]">
-    <label>New Serial Number <span style="font-weight:normal;color:#666">(optional)</span></label>
-    <input type="text" name="serial_new[]">
-    <label>Labor Hours</label>
-    <input type="number" name="labor_hours[]" min="0" step="0.01" value="0" inputmode="decimal">
-    <input type="hidden" name="damage_type[]" value="BR">
-  `;
-  container.appendChild(fieldset);
-}
-
-function removeJob(button) {
-  if (document.querySelectorAll('.job-section').length <= 1) {
-    alert("You must keep at least one job section");
-    return;
-  }
-  button.closest('.job-section').remove();
-}
-
-async function submitRepair(event) {
-  event.preventDefault();
-  
-  const submitButton = document.getElementById('submitButton');
-  
-  // Disable button and show loading state
-  submitButton.disabled = true;
-  submitButton.innerHTML = '<span class="spinner"></span> Processing...';
-
-  try {
-    // Require 2–10 actual files BEFORE and 2–10 actual files AFTER.
-    const beforeInputs = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'));
-    const afterInputs = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'));
-    const beforeCount = beforeInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
-    const afterCount = afterInputs.reduce((sum, input) => sum + (input.files ? input.files.length : 0), 0);
-
-    if (beforeCount < 2 || beforeCount > 10) {
-      alert("Please select minimum 2 and maximum 10 Before photos");
-      throw new Error("Invalid before photo count");
-    }
-    if (afterCount < 2 || afterCount > 10) {
-      alert("Please select minimum 2 and maximum 10 After photos");
-      throw new Error("Invalid after photo count");
+
+        <div class="section">
+            <div class="section-title">Settings and Readings</div>
+            <table>
+                <tr><th>Setpoint</th><td>{safe(report.setpoint)} °C</td></tr>
+                <tr><th>Vents</th><td>{safe(report.vents)}</td></tr>
+                <tr><th>Humidity</th><td>{safe(report.humidity)}</td></tr>
+                <tr><th>Ambient</th><td>{safe(report.ambient_temp)} °C</td></tr>
+                <tr><th>Supply Temp Before</th><td>{safe(report.supply_temp_before)} °C</td></tr>
+                <tr><th>Supply Temp After</th><td>{safe(report.supply_temp_after)} °C</td></tr>
+                <tr><th>Return Temp Before</th><td>{safe(report.return_temp_before)} °C</td></tr>
+                <tr><th>Return Temp After</th><td>{safe(report.return_temp_after)} °C</td></tr>
+                <tr><th>Temperature In Range</th><td>{safe(report.temp_in_range)}</td></tr>
+                <tr><th>Afmelding</th><td>{afmelding_display}</td></tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Problem Description</div>
+            <p>{safe(report.problem_description)}</p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Comments</div>
+            <p>{safe(report.comments)}</p>
+        </div>
+    """
+
+    # Updated Job Tasks section only.
+    if jobs:
+        html_body += """
+        <div class="section">
+            <div class="section-title">Job Tasks</div>
+            <table>
+                <tr>
+                    <th>Job Code</th>
+                    <th>Description</th>
+                    <th>Used Part / Bottle</th>
+                    <th>Quantity</th>
+                    <th>Old Serial</th>
+                    <th>New Serial</th>
+                    <th>Labor Hours</th>
+                </tr>
+        """
+
+        total_labor = 0.0
+
+        for job in jobs:
+            code = (job.job_code or "").strip().upper()
+
+            try:
+                total_labor += float(job.labor_hours or 0)
+            except (TypeError, ValueError):
+                pass
+
+            if code == "E001II":
+                used_part = f"Bottle nr: {safe(job.bottle_number)}"
+                old_serial = "—"
+                new_serial = "—"
+            else:
+                part_number = safe(job.part_number, "")
+                part_description = safe(job.part_description, "")
+                if part_number and part_description:
+                    used_part = f"{part_number}<br>{part_description}"
+                else:
+                    used_part = part_number or part_description or "N/A"
+                old_serial = safe(job.old_serial, "—")
+                new_serial = safe(job.new_serial, "—")
+
+            html_body += f"""
+                <tr>
+                    <td>{safe(job.job_code)}</td>
+                    <td>{safe(job.description)}</td>
+                    <td>{used_part}</td>
+                    <td>{qty(job.quantity)}</td>
+                    <td>{old_serial}</td>
+                    <td>{new_serial}</td>
+                    <td>{qty(job.labor_hours)}</td>
+                </tr>
+            """
+
+        html_body += f"""
+                <tr>
+                    <td colspan="6" style="text-align:right;font-weight:bold;">Total Labor</td>
+                    <td style="font-weight:bold;">{qty(round(total_labor, 2))}</td>
+                </tr>
+            </table>
+        </div>
+        """
+
+    if ice_procedures:
+        for ice in ice_procedures:
+            alarm_row = ""
+            if str(ice.get('alarm_active') or '').strip().casefold() == 'yes':
+                alarm_row = f"<tr><th>Alarm</th><td>{safe(ice.get('alarm'))}</td></tr>"
+
+            html_body += f"""
+        <div class="section">
+            <div class="section-title">Ice Procedure</div>
+            <table>
+                <tr><th>CD26</th><td>{safe(ice.get('cd26'))}</td></tr>
+                <tr><th>CD27</th><td>{safe(ice.get('cd27'))}</td></tr>
+                <tr><th>Drain hose</th><td>{safe(ice.get('drain_hose'))}</td></tr>
+                <tr><th>Upper supply sensor</th><td>{safe(ice.get('upper_supply_sensor'))}</td></tr>
+                <tr><th>Lower supply sensor</th><td>{safe(ice.get('lower_supply_sensor'))}</td></tr>
+                <tr><th>Alarm Active</th><td>{safe(ice.get('alarm_active'))}</td></tr>
+                {alarm_row}
+            </table>
+        </div>
+            """
+
+    if alarms:
+        html_body += """
+        <div class="section">
+            <div class="section-title">Alarms</div>
+            <ul>
+        """
+
+        for alarm in alarms:
+            html_body += f"<li>{safe(alarm.alarm_code)}</li>"
+
+        html_body += "</ul></div>"
+
+    html_body += """
+        <div class="section">
+            <p>This report was automatically generated by the REMS system.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html_body
+
+
+def send_email(subject, body, attachments, report=None, jobs=None, alarms=None, afmelding="", photo_counts=None, ice_procedures=None):
+    SMTP_SERVER = 'smtp.gmail.com'
+    SMTP_PORT = 587
+    SMTP_USERNAME = os.environ.get('EMAIL_USER')
+    SMTP_PASSWORD = os.environ.get('EMAIL_PASS')
+    EMAIL_FROM = os.environ.get('EMAIL_FROM', SMTP_USERNAME)
+    EMAIL_TO = [address.strip() for address in os.environ.get("EMAIL_TO", "").split(",") if address.strip()]
+
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_FROM
+    msg['To'] = ', '.join(EMAIL_TO)
+    msg['Subject'] = f"Herstelmelding {subject} - {datetime.now().strftime('%d-%m-%Y')}"
+
+    html_content = create_email_body(report, jobs, alarms, afmelding, photo_counts, ice_procedures)
+    msg.attach(MIMEText(html_content, 'html'))
+
+    for filepath in attachments:
+        try:
+            with open(filepath, 'rb') as f:
+                if filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    img = MIMEImage(f.read())
+                    img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(filepath))
+                    msg.attach(img)
+                else:
+                    part = MIMEApplication(f.read(), Name=os.path.basename(filepath))
+                    part['Content-Disposition'] = f'attachment; filename="{os.path.basename(filepath)}"'
+                    msg.attach(part)
+        except Exception as e:
+            app.logger.error(f"Failed to attach {filepath}: {str(e)}")
+
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
+        smtp.starttls()
+        smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+        smtp.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+        app.logger.info(f"Email sent to: {EMAIL_TO}")
+
+
+
+def _weekly_freon_period(reference_date=None):
+    """Return the previous Monday-Sunday period."""
+    today = reference_date or datetime.utcnow().date()
+    current_monday = today - timedelta(days=today.weekday())
+    start_date = current_monday - timedelta(days=7)
+    end_date = current_monday - timedelta(days=1)
+    return start_date, end_date
+
+
+def _build_freon_workbook(rows, start_date, end_date):
+    """Create the weekly Freon registration workbook in memory."""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Freon Registration"
+
+    sheet.append(["Date", "Container nr", "Bottle nr", "Quantity", "Technician"])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1F4E78")
+        cell.alignment = Alignment(horizontal="center")
+
+    for job, report in rows:
+        sheet.append([
+            report.report_date,
+            report.container_number or "",
+            job.bottle_number or "",
+            float(job.quantity or 0),
+            report.technician_name or ""
+        ])
+
+    for cell in sheet["A"][1:]:
+        cell.number_format = "dd/mm/yyyy"
+    for cell in sheet["D"][1:]:
+        cell.number_format = "0.00"
+
+    sheet.column_dimensions["A"].width = 14
+    sheet.column_dimensions["B"].width = 18
+    sheet.column_dimensions["C"].width = 20
+    sheet.column_dimensions["D"].width = 12
+    sheet.column_dimensions["E"].width = 24
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"Freon_Registration_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+    return filename, output.getvalue()
+
+
+def send_weekly_freon_registration(reference_date=None):
+    """Email unsent E001II registrations from the previous Monday-Sunday."""
+    start_date, end_date = _weekly_freon_period(reference_date)
+
+    rows = (
+        db.session.query(RepairJob, RepairReport)
+        .join(RepairReport, RepairJob.report_id == RepairReport.id)
+        .filter(
+            RepairJob.job_code == "E001II",
+            RepairReport.report_date >= start_date,
+            RepairReport.report_date <= end_date,
+            RepairJob.freon_sent_at.is_(None)
+        )
+        .order_by(RepairReport.report_date.asc(), RepairReport.id.asc(), RepairJob.id.asc())
+        .all()
+    )
+
+    smtp_username = os.environ.get("EMAIL_USER")
+    smtp_password = os.environ.get("EMAIL_PASS")
+    email_from = os.environ.get("EMAIL_FROM", smtp_username)
+    recipient_setting = os.environ.get("FREON_EMAIL_TO") or os.environ.get("EMAIL_TO", "")
+    email_to = [address.strip() for address in recipient_setting.split(",") if address.strip()]
+
+    if not smtp_username or not smtp_password:
+        raise RuntimeError("Gmail credentials are not configured")
+    if not email_to:
+        raise RuntimeError("FREON_EMAIL_TO is not configured")
+
+    def esc(value):
+        return html.escape(str(value if value is not None else ""))
+
+    table_rows = ""
+    for job, report in rows:
+        quantity = float(job.quantity or 0)
+        quantity_text = str(int(quantity)) if quantity.is_integer() else f"{quantity:g}"
+        table_rows += f"""
+        <tr>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{report.report_date.strftime('%d/%m/%Y')}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(report.container_number)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(job.bottle_number)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;text-align:right;">{esc(quantity_text)}</td>
+          <td style="padding:7px 10px;border:1px solid #d9d9d9;">{esc(report.technician_name)}</td>
+        </tr>"""
+
+    if not table_rows:
+        table_rows = '<tr><td colspan="5" style="padding:10px;border:1px solid #d9d9d9;">No R134A registrations for this period.</td></tr>'
+
+    body = f"""
+    <html><body style="font-family:Arial,sans-serif;color:#222;">
+      <p>Hi,</p>
+      <p>Please find below the weekly Freon registration for <strong>{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}</strong>.</p>
+      <table style="border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#f2f2f2;">
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Date</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Container nr</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Bottle nr</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Quantity</th>
+          <th style="padding:7px 10px;border:1px solid #d9d9d9;">Technician</th>
+        </tr></thead>
+        <tbody>{table_rows}</tbody>
+      </table>
+      <p>Kind regards,<br>REMS</p>
+    </body></html>
+    """
+
+    msg = MIMEMultipart()
+    msg["From"] = email_from
+    msg["To"] = ", ".join(email_to)
+    msg["Subject"] = f"REMS - Weekly Freon Registration - {start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
+    msg.attach(MIMEText(body, "html"))
+
+    if rows:
+        filename, workbook_bytes = _build_freon_workbook(rows, start_date, end_date)
+        attachment = MIMEApplication(
+            workbook_bytes,
+            _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        attachment.add_header("Content-Disposition", "attachment", filename=filename)
+        msg.attach(attachment)
+
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_username, smtp_password)
+        smtp.sendmail(email_from, email_to, msg.as_string())
+
+    # Only mark records after SMTP confirms the message was sent.
+    sent_at = datetime.utcnow()
+    for job, _report in rows:
+        job.freon_sent_at = sent_at
+    db.session.commit()
+
+    app.logger.info(
+        "Weekly Freon registration sent: %s rows, %s to %s",
+        len(rows), start_date, end_date
+    )
+    return {
+        "status": "success",
+        "count": len(rows),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
     }
 
-    // Validate temperature inputs
-    const tempInputs = [
-      document.getElementById('setpoint'),
-      document.getElementById('ambient'),
-      document.getElementById('supply_voor'),
-      document.getElementById('supply_na'),
-      document.getElementById('return_voor'),
-      document.getElementById('return_na')
-    ];
-    
-    let hasInvalidTemp = false;
-    tempInputs.forEach(input => {
-      if (!validateTemperatureInput(input)) {
-        hasInvalidTemp = true;
-      }
-    });
-    
-    if (hasInvalidTemp) {
-      alert("Please correct the invalid temperature values (only numbers, minus sign, and one decimal point allowed)");
-      throw new Error("Invalid temperature values");
-    }
 
-    const form = document.getElementById("repairForm");
-    const formData = new FormData(form);
+@app.route('/api/weekly-freon-registration', methods=['POST'])
+def weekly_freon_registration_route():
+    """Protected endpoint intended for the Render Cron Job."""
+    expected_secret = os.environ.get("CRON_SECRET", "").strip()
+    supplied_secret = request.headers.get("X-Cron-Secret", "").strip()
+    if not expected_secret or supplied_secret != expected_secret:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
-    // Remove the original full-resolution photo files that FormData(form)
-    // added automatically. We append compressed versions below instead.
-    const photoKeys = [];
-    for (const [key] of formData.entries()) {
-      if (key.startsWith('fotos_voor') || key.startsWith('fotos_na')) {
-        if (!photoKeys.includes(key)) photoKeys.push(key);
-      }
-    }
-    photoKeys.forEach(key => formData.delete(key));
+    try:
+        result = send_weekly_freon_registration()
+        return jsonify(result), 200
+    except Exception as exc:
+        db.session.rollback()
+        app.logger.error("Weekly Freon registration failed: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
-    const beforeFiles = beforeInputs.flatMap(input => Array.from(input.files || []));
-    const afterFiles = afterInputs.flatMap(input => Array.from(input.files || []));
-    const totalPhotos = beforeFiles.length + afterFiles.length;
-    let processedPhotos = 0;
+def send_repair_zone_email(container_number, technician_name, current_position):
+    smtp_server = 'smtp.gmail.com'
+    smtp_port = 587
+    smtp_username = os.environ.get('EMAIL_USER')
+    smtp_password = os.environ.get('EMAIL_PASS')
+    email_from = os.environ.get('EMAIL_FROM', smtp_username)
+    recipient_setting = os.environ.get('REPAIR_ZONE_EMAIL_TO') or os.environ.get('EMAIL_TO', '')
+    email_to = [address.strip() for address in recipient_setting.split(',') if address.strip()]
 
-    async function compressAndAppend(filesToProcess, formKey) {
-      for (const file of filesToProcess) {
-        processedPhotos += 1;
-        submitButton.innerHTML =
-          `<span class="spinner"></span> Compressing photos ${processedPhotos}/${totalPhotos}...`;
+    if not smtp_username or not smtp_password:
+        raise RuntimeError('Gmail credentials are not configured')
+    if not email_to:
+        raise RuntimeError('REPAIR_ZONE_EMAIL_TO is not configured')
 
-        const { compressedFile, originalSize } = await compressImagePromise(file);
-        formData.append(formKey, compressedFile, compressedFile.name);
+    safe_container = html.escape(container_number)
+    safe_technician = html.escape(technician_name)
+    safe_position = html.escape(current_position)
+    requested_at = datetime.utcnow().strftime('%d-%m-%Y %H:%M UTC')
 
-        console.log(
-          `Compressed ${file.name}: ${formatFileSize(originalSize)} → ${formatFileSize(compressedFile.size)}`
-        );
-      }
-    }
+    message = MIMEMultipart('alternative')
+    message['From'] = email_from
+    message['To'] = ', '.join(email_to)
+    message['Subject'] = f"REMS Repair Zone Request - {container_number}"
+    message.attach(MIMEText(f"""
+    <html><body style="font-family:Arial,sans-serif;color:#222;">
+      <h2 style="color:#003366;">Reefer Repair Zone Request</h2>
+      <table style="border-collapse:collapse;">
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Container</strong></td><td>{safe_container}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Current position</strong></td><td>{safe_position}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Requested by</strong></td><td>{safe_technician}</td></tr>
+        <tr><td style="padding:6px 18px 6px 0;"><strong>Date/time</strong></td><td>{requested_at}</td></tr>
+      </table>
+      <p>Please bring this reefer to the repair zone.</p>
+      <p style="color:#666;font-size:12px;">This request was automatically generated by REMS.</p>
+    </body></html>
+    """, 'html'))
 
-    await compressAndAppend(beforeFiles, 'fotos_voor');
-    await compressAndAppend(afterFiles, 'fotos_na');
+    with smtplib.SMTP(smtp_server, smtp_port) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_username, smtp_password)
+        smtp.sendmail(email_from, email_to, message.as_string())
+        app.logger.info("Repair-zone request sent for %s to %s", container_number, email_to)
 
-    submitButton.innerHTML = '<span class="spinner"></span> Uploading report...';
-
-    formData.append("containernr", form.containernr.value);
-    formData.append("naam", form.naam.value);
-    formData.append("datum", form.datum.value);
-    formData.append("model", form.model.value);
-    formData.append("serienr", form.serienr.value);
-    formData.append("warranty_id", form.warranty_id.value);
-    formData.append("garantie", form.garantie.value);
-    formData.append("setpoint", form.setpoint.value);
-    formData.append("vents", form.vents.value);
-    formData.append("hum", form.hum.value);
-    formData.append("ambient", form.ambient.value);
-    formData.append("supply_voor", form.supply_voor.value);
-    formData.append("supply_na", form.supply_na.value);
-    formData.append("return_voor", form.return_voor.value);
-    formData.append("return_na", form.return_na.value);
-    formData.append("temp_in_range", form.temp_in_range.value);
-    formData.append("probleem", form.probleem.value);
-    formData.append("opmerkingen", form.opmerkingen.value);
-
-    const jobSections = document.querySelectorAll(".job-section");
-    formData.append("job_count", jobSections.length);
-
-
-    jobSections.forEach((section, index) => {
-      const descElem = section.querySelector("[name='job_description[]']");
-      const desc = descElem?.getAttribute("data-description") || descElem?.value || "";
-      formData.append(`job[${index}][description]`, desc);
-      formData.append(`job[${index}][code]`, section.querySelector("[name='job_code[]']").value);
-      formData.append(`job[${index}][part_number]`, section.querySelector("[name='part_number[]']").value);
-      formData.append(`job[${index}][part_description]`, section.querySelector("[name='part_description[]']").value);
-      formData.append(`job[${index}][quantity]`, section.querySelector("[name='quantity[]']").value);
-      formData.append(`job[${index}][old_serial]`, section.querySelector("[name='serial_old[]']").value);
-      formData.append(`job[${index}][new_serial]`, section.querySelector("[name='serial_new[]']").value);
-      const bottleInput = section.querySelector("[name='bottle_number[]']");
-      formData.append(`job[${index}][bottle_number]`, bottleInput ? bottleInput.value : "");
-      formData.append(`job[${index}][labor_hours]`, section.querySelector("[name='labor_hours[]']").value);
-      formData.append(`job[${index}][damage_type]`, section.querySelector("[name='damage_type[]']").value);
-
-      const iceCd26 = section.querySelector("[name='ice_cd26[]']");
-      const iceCd27 = section.querySelector("[name='ice_cd27[]']");
-      const iceDrain = section.querySelector("[name='ice_drain_hose[]']");
-      const iceUpper = section.querySelector("[name='ice_upper_supply_sensor[]']");
-      const iceLower = section.querySelector("[name='ice_lower_supply_sensor[]']");
-      const iceAlarmActive = section.querySelector("[name='ice_alarm_active[]']");
-      const iceAlarm = section.querySelector("[name='ice_alarm[]']");
-      formData.append(`job[${index}][ice_cd26]`, iceCd26 ? iceCd26.value : "");
-      formData.append(`job[${index}][ice_cd27]`, iceCd27 ? iceCd27.value : "");
-      formData.append(`job[${index}][ice_drain_hose]`, iceDrain ? iceDrain.value : "");
-      formData.append(`job[${index}][ice_upper_supply_sensor]`, iceUpper ? iceUpper.value : "");
-      formData.append(`job[${index}][ice_lower_supply_sensor]`, iceLower ? iceLower.value : "");
-      formData.append(`job[${index}][ice_alarm_active]`, iceAlarmActive ? iceAlarmActive.value : "");
-      formData.append(`job[${index}][ice_alarm]`, iceAlarm ? iceAlarm.value : "");
-    });
-
-    const alarmInputs = document.querySelectorAll("input[name='alarm']");
-    const alarmValues = Array.from(alarmInputs)
-      .map(input => input.value.trim())
-      .filter((val, idx, self) => val && self.indexOf(val) === idx);
-    alarmValues.forEach((value) => {
-      formData.append('alarm[]', value);
-    });
-
-    submitButton.innerHTML = '<span class="spinner"></span> Sending report...';
-
-    const response = await fetch('/api/submit', {
-      method: "POST",
-      body: formData,
-    });
-
-    const result = await response.json();
-    if (result.status === "success") {
-      alert("✅ Report submitted successfully!");
-      const techName = document.getElementById("naam").value;
-      form.reset();
-      document.getElementById("naam").value = techName;
-      // Reset to one job section
-      document.querySelector("#jobContainer fieldset").innerHTML = "";
-      addJob();
-      showRepairList();
-    } else {
-      alert("❌ Error submitting report: " + result.message);
-    }
-  } catch (error) {
-    if (error.message !== "Invalid before photo count" && error.message !== "Invalid after photo count" && error.message !== "Invalid temperature values") {
-      alert("❌ Network error: " + error.message);
-    }
-  } finally {
-    // Re-enable button regardless of success/error
-    const submitButton = document.getElementById('submitButton');
-    submitButton.disabled = false;
-    submitButton.innerHTML = 'Submit Report';
-  }
-}
-
-// Initialize form submission handler
-document.getElementById("repairForm").addEventListener("submit", function(e) {
-  // Prevent multiple submissions if button is already disabled
-  if (document.getElementById('submitButton').disabled) {
-    e.preventDefault();
-    return;
-  }
-  submitRepair(e);
-});
-</script>
-</body>
-</html>
+# ===================================
+# Run App
+# ===================================
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
