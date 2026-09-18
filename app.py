@@ -480,23 +480,57 @@ def search_job_codes():
 @app.route('/api/parts', methods=['GET'])
 def search_spare_parts():
     q = str(request.args.get('q') or '').strip()
-    query = SparePartMaster.query
+    model_family = str(request.args.get('model_family') or '').strip()
+
+    # The model-specific Excel files are loaded into LaborRuleMaster.
+    # Query that table directly so only parts belonging to the selected
+    # Model Family can ever be returned.
+    if not model_family:
+        return jsonify({"results": []})
+
+    query = LaborRuleMaster.query.filter(
+        LaborRuleMaster.model_family == model_family
+    )
+
     if q:
         pattern = f"%{q}%"
         query = query.filter(or_(
-            SparePartMaster.part_number.ilike(pattern),
-            SparePartMaster.description.ilike(pattern),
-            SparePartMaster.replaced_by.ilike(pattern)
+            LaborRuleMaster.part_number.ilike(pattern),
+            LaborRuleMaster.part_description.ilike(pattern)
         ))
-    parts = query.order_by(SparePartMaster.part_number.asc()).limit(50).all()
-    return jsonify({"results": [{
-        "id": part.part_number,
-        "text": f"{part.part_number} — {part.description or ''}",
-        "part_number": part.part_number,
-        "description": part.description or "",
-        "replaced_by": part.replaced_by or "",
-        "max_qty": part.max_qty or ""
-    } for part in parts]})
+
+    rules = (
+        query
+        .order_by(LaborRuleMaster.part_number.asc())
+        .limit(250)
+        .all()
+    )
+
+    # A part can have several damage/repair rules in the same model file.
+    # Return each part number only once to the technician.
+    results = []
+    seen = set()
+    for rule in rules:
+        part_number = (rule.part_number or '').strip()
+        if not part_number or part_number in seen:
+            continue
+        seen.add(part_number)
+        description = (rule.part_description or '').strip()
+        results.append({
+            "id": part_number,
+            "text": f"{part_number} — {description}",
+            "part_number": part_number,
+            "description": description,
+            "replaced_by": "",
+            "max_qty": ""
+        })
+        if len(results) >= 50:
+            break
+
+    return jsonify({
+        "results": results,
+        "model_family": model_family
+    })
 
 @app.route('/api/labor-hours', methods=['GET'])
 def get_labor_hours():
