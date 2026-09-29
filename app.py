@@ -71,6 +71,13 @@ class RepairReport(db.Model):
     serial_number = db.Column(db.String(100))
     warranty_id = db.Column(db.String(100))
     warranty_status = db.Column(db.String(100))
+    warranty_date_in_service = db.Column(db.Date)
+    warranty_software_version = db.Column(db.String(100))
+    warranty_configuration = db.Column(db.String(255))
+    warranty_unit_hours = db.Column(db.Float)
+    warranty_compressor_hours = db.Column(db.Float)
+    warranty_component_display_value = db.Column(db.String(255))
+    warranty_pti_step_failure = db.Column(db.String(255))
     setpoint = db.Column(db.Float)
     vents = db.Column(db.String(50))
     humidity = db.Column(db.String(50))
@@ -399,6 +406,27 @@ with app.app_context():
             ))
             db.session.execute(text(
                 "ALTER TABLE repair_jobs ADD COLUMN IF NOT EXISTS freon_sent_at TIMESTAMP"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_date_in_service DATE"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_software_version VARCHAR(100)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_configuration VARCHAR(255)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_unit_hours DOUBLE PRECISION"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_compressor_hours DOUBLE PRECISION"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_component_display_value VARCHAR(255)"
+            ))
+            db.session.execute(text(
+                "ALTER TABLE repair_reports ADD COLUMN IF NOT EXISTS warranty_pti_step_failure VARCHAR(255)"
             ))
             db.session.commit()
         except Exception:
@@ -735,6 +763,42 @@ def submit_report():
         if not (len(container_nr) == 11 and container_nr[:4].isalpha() and container_nr[4:].isdigit()):
             return jsonify({"status": "error", "message": "Invalid container number format"}), 400
 
+        # Warranty validation. When Warranty = Ja, all warranty requirements are mandatory.
+        warranty_status = str(form_data.get('garantie') or '').strip()
+        if warranty_status.casefold() not in ('ja', 'nee'):
+            return jsonify({"status": "error", "message": "Please select Warranty: Ja or Nee"}), 400
+
+        warranty_data = {
+            'warranty_id': str(form_data.get('warranty_id') or '').strip(),
+            'date_in_service': str(form_data.get('warranty_date_in_service') or '').strip(),
+            'software_version': str(form_data.get('warranty_software_version') or '').strip(),
+            'configuration': str(form_data.get('warranty_configuration') or '').strip(),
+            'unit_hours': str(form_data.get('warranty_unit_hours') or '').strip(),
+            'compressor_hours': str(form_data.get('warranty_compressor_hours') or '').strip(),
+            'component_display_value': str(form_data.get('warranty_component_display_value') or '').strip(),
+            'pti_step_failure': str(form_data.get('warranty_pti_step_failure') or '').strip(),
+        }
+
+        warranty_date = None
+        warranty_unit_hours = None
+        warranty_compressor_hours = None
+        if warranty_status.casefold() == 'ja':
+            missing = [name for name, value in warranty_data.items() if not value]
+            if missing:
+                return jsonify({
+                    "status": "error",
+                    "message": "Please complete all mandatory warranty fields"
+                }), 400
+            try:
+                warranty_date = datetime.strptime(warranty_data['date_in_service'], '%Y-%m-%d').date()
+                warranty_unit_hours = float(warranty_data['unit_hours'])
+                warranty_compressor_hours = float(warranty_data['compressor_hours'])
+            except ValueError:
+                return jsonify({
+                    "status": "error",
+                    "message": "Warranty Date in Service and hour values are invalid"
+                }), 400
+
         # Create Repair Report
         report = RepairReport(
             container_number=container_nr,
@@ -743,8 +807,15 @@ def submit_report():
             model=form_data.get('model'),
             model_family=form_data.get('model_family'),
             serial_number=form_data.get('serienr'),
-            warranty_id=form_data.get('warranty_id'),
-            warranty_status=form_data.get('garantie'),
+            warranty_id=warranty_data['warranty_id'] if warranty_status.casefold() == 'ja' else None,
+            warranty_status=warranty_status,
+            warranty_date_in_service=warranty_date,
+            warranty_software_version=warranty_data['software_version'] if warranty_status.casefold() == 'ja' else None,
+            warranty_configuration=warranty_data['configuration'] if warranty_status.casefold() == 'ja' else None,
+            warranty_unit_hours=warranty_unit_hours,
+            warranty_compressor_hours=warranty_compressor_hours,
+            warranty_component_display_value=warranty_data['component_display_value'] if warranty_status.casefold() == 'ja' else None,
+            warranty_pti_step_failure=warranty_data['pti_step_failure'] if warranty_status.casefold() == 'ja' else None,
             setpoint=float(form_data.get('setpoint', 0)),
             vents=form_data.get('vents'),
             humidity=form_data.get('hum'),
@@ -1025,6 +1096,14 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None, ice
     else:
         afmelding_display = "N/A"
 
+    warranty_is_yes = str(report.warranty_status or '').strip().casefold() == 'ja'
+    warranty_badge = (
+        '<div style="display:inline-block;background:#f28c00;color:#ffffff;'
+        'font-weight:700;font-size:16px;padding:8px 14px;border-radius:5px;'
+        'margin:0 0 18px 0;letter-spacing:.3px;">WARRANTY REPAIR</div>'
+        if warranty_is_yes else ''
+    )
+
     html_body = f"""
     <html>
     <head>
@@ -1039,6 +1118,7 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None, ice
     </head>
     <body>
         <h2>Repair Report for Container: {safe(report.container_number)}</h2>
+        {warranty_badge}
 
         <div class="section">
             <div class="section-title">General Information</div>
@@ -1048,10 +1128,25 @@ def create_email_body(report, jobs, alarms, afmelding="", photo_counts=None, ice
                 <tr><th>Technician</th><td>{safe(report.technician_name)}</td></tr>
                 <tr><th>Model</th><td>{safe(report.model)}</td></tr>
                 <tr><th>Serial Number</th><td>{safe(report.serial_number)}</td></tr>
-                <tr><th>Warranty ID</th><td>{safe(report.warranty_id)}</td></tr>
                 <tr><th>Warranty Status</th><td>{safe(report.warranty_status)}</td></tr>
+                {f'<tr><th>Warranty ID</th><td>{safe(report.warranty_id)}</td></tr>' if warranty_is_yes else ''}
             </table>
         </div>
+
+        {f'''
+        <div class="section">
+            <div class="section-title" style="color:#d97706;">Warranty Requirements</div>
+            <table>
+                <tr><th>Date in Service</th><td>{safe(report.warranty_date_in_service)}</td></tr>
+                <tr><th>Software Version</th><td>{safe(report.warranty_software_version)}</td></tr>
+                <tr><th>Configuration</th><td>{safe(report.warranty_configuration)}</td></tr>
+                <tr><th>Unit Hours</th><td>{qty(report.warranty_unit_hours)}</td></tr>
+                <tr><th>Compressor Hours</th><td>{qty(report.warranty_compressor_hours)}</td></tr>
+                <tr><th>Display Value of Component</th><td>{safe(report.warranty_component_display_value)}</td></tr>
+                <tr><th>PTI Step Failure</th><td>{safe(report.warranty_pti_step_failure)}</td></tr>
+            </table>
+        </div>
+        ''' if warranty_is_yes else ''}
 
         <div class="section">
             <div class="section-title">Settings and Readings</div>
