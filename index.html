@@ -237,6 +237,22 @@
       color: #666;
     }
 
+    #warrantyRequirements {
+      display: none;
+      grid-column: 1 / -1;
+      border: 2px solid #f0a33a;
+      background: #fff8ee;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    #warrantyRequirements legend { color: #b56700; padding: 0 6px; }
+    .warranty-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px 16px;
+    }
+    .warranty-field label::after { content: " *"; color: #b00020; }
+
 </style>
 </head>
 <body>
@@ -282,8 +298,25 @@
   <option value="NaturaLINE">NaturaLINE</option>
 </select>
 <label for="serienr">SERIENR.</label><input id="serienr" name="serienr" required="" type="text"/>
-<label for="warranty_id">WARRANTY ID NR</label><input id="warranty_id" name="warranty_id" required="" type="text"/>
-<label for="garantie">GARANTIE</label><input id="garantie" name="garantie" required="" type="text"/>
+<label for="garantie">WARRANTY</label>
+<select id="garantie" name="garantie" required onchange="toggleWarrantyFields()">
+  <option value="">Select</option>
+  <option value="Ja">Ja</option>
+  <option value="Nee">Nee</option>
+</select>
+<fieldset id="warrantyRequirements">
+  <legend>Warranty Requirements</legend>
+  <div class="warranty-grid">
+    <div class="warranty-field"><label for="warranty_id">Warranty ID NR</label><input id="warranty_id" name="warranty_id" type="text"/></div>
+    <div class="warranty-field"><label for="warranty_date_in_service">Date in Service</label><input id="warranty_date_in_service" name="warranty_date_in_service" type="date"/></div>
+    <div class="warranty-field"><label for="warranty_software_version">Software Version</label><input id="warranty_software_version" name="warranty_software_version" type="text"/></div>
+    <div class="warranty-field"><label for="warranty_configuration">Configuration</label><input id="warranty_configuration" name="warranty_configuration" type="text"/></div>
+    <div class="warranty-field"><label for="warranty_unit_hours">Unit Hours</label><input id="warranty_unit_hours" name="warranty_unit_hours" type="number" min="0" step="0.1"/></div>
+    <div class="warranty-field"><label for="warranty_compressor_hours">Compressor Hours</label><input id="warranty_compressor_hours" name="warranty_compressor_hours" type="number" min="0" step="0.1"/></div>
+    <div class="warranty-field"><label for="warranty_component_display_value">Display Value of Component</label><input id="warranty_component_display_value" name="warranty_component_display_value" type="text"/></div>
+    <div class="warranty-field"><label for="warranty_pti_step_failure">PTI Step Failure</label><input id="warranty_pti_step_failure" name="warranty_pti_step_failure" type="text"/></div>
+  </div>
+</fieldset>
 <label for="setpoint">SETPOINT °C</label><input id="setpoint" name="setpoint" required="" type="text" oninput="validateTemperatureInput(this)"/>
 <label for="vents">VENTS</label><input id="vents" name="vents" required="" type="text"/>
 <label for="hum">HUM</label><input id="hum" name="hum" required="" type="text"/>
@@ -522,10 +555,24 @@ async function submitRepairZoneRequest(event) {
   }
 }
 
+function toggleWarrantyFields() {
+  const warrantySelect = document.getElementById('garantie');
+  const section = document.getElementById('warrantyRequirements');
+  const isWarranty = (warrantySelect.value || '').toLowerCase() === 'ja';
+  const fields = section.querySelectorAll('input, select, textarea');
+
+  section.style.display = isWarranty ? 'block' : 'none';
+  fields.forEach(field => {
+    field.required = isWarranty;
+    if (!isWarranty) field.value = '';
+  });
+}
+
 function prepareReport(containerNumber = '') {
   const form = document.getElementById('repairForm');
   const technicianName = localStorage.getItem('loggedInUser') || document.getElementById('naam').value;
   form.reset();
+  toggleWarrantyFields();
   document.getElementById('naam').value = technicianName;
   document.getElementById('containernr').value = containerNumber;
   document.getElementById('datum').value = new Date().toISOString().slice(0, 10);
@@ -1258,6 +1305,17 @@ async function submitRepair(event) {
   submitButton.innerHTML = '<span class="spinner"></span> Processing...';
 
   try {
+    const warrantyStatus = document.getElementById('garantie').value;
+    if (warrantyStatus === 'Ja') {
+      const warrantyFields = Array.from(document.querySelectorAll('#warrantyRequirements input'));
+      const incompleteWarrantyField = warrantyFields.find(field => !String(field.value || '').trim());
+      if (incompleteWarrantyField) {
+        incompleteWarrantyField.focus();
+        alert('Please complete all mandatory warranty fields before submitting the report.');
+        throw new Error('Incomplete warranty fields');
+      }
+    }
+
     // Require 2–10 actual files BEFORE and 2–10 actual files AFTER.
     const beforeInputs = Array.from(document.querySelectorAll('#fotos_voor input[type="file"]'));
     const afterInputs = Array.from(document.querySelectorAll('#fotos_na input[type="file"]'));
@@ -1340,6 +1398,13 @@ async function submitRepair(event) {
     formData.append("serienr", form.serienr.value);
     formData.append("warranty_id", form.warranty_id.value);
     formData.append("garantie", form.garantie.value);
+    formData.append("warranty_date_in_service", form.warranty_date_in_service.value);
+    formData.append("warranty_software_version", form.warranty_software_version.value);
+    formData.append("warranty_configuration", form.warranty_configuration.value);
+    formData.append("warranty_unit_hours", form.warranty_unit_hours.value);
+    formData.append("warranty_compressor_hours", form.warranty_compressor_hours.value);
+    formData.append("warranty_component_display_value", form.warranty_component_display_value.value);
+    formData.append("warranty_pti_step_failure", form.warranty_pti_step_failure.value);
     formData.append("setpoint", form.setpoint.value);
     formData.append("vents", form.vents.value);
     formData.append("hum", form.hum.value);
@@ -1407,6 +1472,7 @@ async function submitRepair(event) {
       alert("✅ Report submitted successfully!");
       const techName = document.getElementById("naam").value;
       form.reset();
+      toggleWarrantyFields();
       document.getElementById("naam").value = techName;
       // Reset to one job section
       document.querySelector("#jobContainer fieldset").innerHTML = "";
