@@ -38,9 +38,12 @@ db_url = os.environ.get('DATABASE_URL')
 if not db_url:
     raise RuntimeError("DATABASE_URL environment variable is not set")
 
-# Adjust for postgres:// vs postgresql://
+# Explicitly use psycopg2. SQLAlchemy 2.1+ defaults plain postgresql:// URLs
+# to psycopg (v3), while REMS installs psycopg2-binary.
 if db_url.startswith('postgres://'):
-    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    db_url = db_url.replace('postgres://', 'postgresql+psycopg2://', 1)
+elif db_url.startswith('postgresql://'):
+    db_url = db_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 
 app.config.update({
     'SQLALCHEMY_DATABASE_URI': db_url,
